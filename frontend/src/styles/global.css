@@ -1,0 +1,401 @@
+/* =========================================================
+   AntRack 蚁仓 · 全局主题样式
+   =========================================================
+   CSS 变量来源：
+   - the mes.js 注入，每套主题严格 10 个色值 + 固定功能色
+   - --bg / --card / --sidebar-bg / --text-main / --text-sub
+   - --text-placeholder / --primary / --primary-hover
+   - --secondary / --border
+   - 固定功能色：--success / --warning / --danger / --info
+   - 自动推导：--card-2 / --btn-text / --btn-text-secondary
+               --btn-text-disabled / --btn-overlay / --btn-overlay-border
+               --overlay-subtle / --topbar-alpha / --dialog-alpha
+               / --dropdown-alpha
+   约束：
+   - 毛玻璃 backdrop-filter 只允许：顶栏、弹窗、悬浮卡片（下拉菜单）
+   - 侧边栏、表格、表单使用实色（--bg / --card / --sidebar-bg），禁止毛玻璃
+   ========================================================= */
+
+:root {
+  /* 默认占位（黑玄色基底 + 科技蓝强调），initTheme 会立刻覆盖 */
+  --bg: #1a1d23;
+  --card: #242830;
+  --card-2: #2a2f38;
+  --sidebar-bg: #16191f;
+  --text-main: #e8e8e8;
+  --text-sub: #999999;
+  --text-placeholder: #6a6a6a;
+  --primary: #22b8dd;
+  --primary-hover: #1a9bc0;
+  --secondary: #2c313a;
+  --border: #2f343d;
+  --btn-text: #ffffff;
+  --btn-text-secondary: #e8e8e8;
+  --success: #28c868;
+  --warning: #ff9500;
+  --danger:  #f84242;
+  --info:    #3B82F6;
+  --btn-text-disabled: rgba(255,255,255,0.35);
+  --btn-overlay: rgba(255,255,255,0.06);
+  --btn-overlay-border: rgba(255,255,255,0.08);
+  --overlay-subtle: rgba(255,255,255,0.03);
+  --topbar-alpha: rgba(36,40,48,0.72);
+  --dialog-alpha: rgba(36,40,48,0.82);
+  --dropdown-alpha: rgba(36,40,48,0.88);
+}
+
+* { box-sizing: border-box; }
+html, body, #app { height: 100%; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  transition: background .2s ease, color .2s ease;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+::-webkit-scrollbar-track { background: transparent; }
+
+a { color: var(--primary); text-decoration: none; }
+
+/* 页面卡片（实色 · 禁止毛玻璃） */
+.page-card {
+  background: var(--card);
+  border-radius: 10px;
+  padding: 18px 20px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  transition: background .2s ease, border-color .2s ease;
+}
+.page-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.toolbar .flex-grow { flex-grow: 1; }
+
+.readonly-field {
+  color: var(--text-sub) !important;
+  background: var(--overlay-subtle) !important;
+  cursor: not-allowed !important;
+}
+
+.row-warn {
+  background: color-mix(in srgb, var(--warning) 12%, transparent) !important;
+}
+.row-warn:hover > td {
+  background: color-mix(in srgb, var(--warning) 20%, transparent) !important;
+}
+
+.el-card {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-main) !important;
+}
+.el-card__header { border-bottom: 1px solid var(--border) !important; }
+
+/* =========================================================
+   按钮（统一新样式 · 主题色）
+   ========================================================= */
+.el-button,
+.el-button.is-link,
+.el-button.is-text {
+  color: var(--btn-text) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  transition: all .15s ease !important;
+  border-radius: 6px !important;
+  padding: 8px 14px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  border: 1px solid transparent !important;
+  text-decoration: none !important;
+  background: var(--primary) !important;
+  border-color: var(--primary) !important;
+}
+.el-button > span {
+  display: inline-flex !important;
+  align-items: center !important;
+  line-height: 1 !important;
+  gap: 4px;
+}
+.el-button:hover,
+.el-button:focus-visible {
+  background: var(--primary-hover) !important;
+  border-color: var(--primary-hover) !important;
+  transform: translateY(-1px) !important;
+}
+.el-button:active {
+  transform: translateY(0) scale(0.97) !important;
+  filter: brightness(0.92) !important;
+}
+.el-button.is-disabled,
+.el-button.is-disabled:hover,
+.el-button.is-disabled:active,
+.el-button[disabled],
+.el-button[disabled]:hover,
+.el-button[disabled]:active {
+  color: var(--btn-text-disabled) !important;
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  filter: none !important;
+  background: var(--btn-overlay) !important;
+  border-color: var(--btn-overlay-border) !important;
+}
+
+/* 主按钮 primary → 已是主题主色，保持一致
+   success / warning / danger / info  → 固定功能色 */
+.el-button--success {
+  background: var(--success) !important; border-color: var(--success) !important;
+}
+.el-button--success:hover,
+.el-button--success:focus-visible {
+  background: color-mix(in srgb, var(--success) 86%, black) !important;
+  border-color: color-mix(in srgb, var(--success) 86%, black) !important;
+}
+.el-button--warning {
+  background: var(--warning) !important; border-color: var(--warning) !important;
+}
+.el-button--warning:hover,
+.el-button--warning:focus-visible {
+  background: color-mix(in srgb, var(--warning) 88%, black) !important;
+  border-color: color-mix(in srgb, var(--warning) 88%, black) !important;
+}
+.el-button--danger {
+  background: var(--danger) !important; border-color: var(--danger) !important;
+}
+.el-button--danger:hover,
+.el-button--danger:focus-visible {
+  background: color-mix(in srgb, var(--danger) 86%, black) !important;
+  border-color: color-mix(in srgb, var(--danger) 86%, black) !important;
+}
+.el-button--info {
+  background: var(--info) !important; border-color: var(--info) !important;
+}
+.el-button--info:hover,
+.el-button--info:focus-visible {
+  background: color-mix(in srgb, var(--info) 86%, black) !important;
+  border-color: color-mix(in srgb, var(--info) 86%, black) !important;
+}
+
+/* 次要按钮：默认样式 + text-sub 配色，使用主题的 --secondary 背景 */
+.el-button--default,
+.el-button:not([class*="el-button--"]):not(.el-button--primary):not(.el-button--success):not(.el-button--warning):not(.el-button--danger):not(.el-button--info) {
+  background: var(--secondary) !important;
+  border-color: var(--secondary) !important;
+  color: var(--btn-text-secondary) !important;
+}
+.el-button--default:hover,
+.el-button:not([class*="el-button--"]):not(.el-button--primary):not(.el-button--success):not(.el-button--warning):not(.el-button--danger):not(.el-button--info):hover {
+  background: color-mix(in srgb, var(--secondary) 82%, var(--primary) 18%) !important;
+  border-color: color-mix(in srgb, var(--secondary) 72%, var(--primary) 28%) !important;
+  color: var(--primary) !important;
+}
+
+/* small 尺寸 */
+.el-button--small,
+.el-button--small.is-link,
+.el-button--small.is-text {
+  border-radius: 4px !important;
+  padding: 2px 8px !important;
+  font-size: 12px !important;
+}
+
+/* 文本/链接按钮统一为按钮外观 */
+.el-button.is-link,
+.el-button.is-text {
+  background: var(--secondary) !important;
+  border-color: var(--secondary) !important;
+  color: var(--btn-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+/* =========================================================
+   表单输入（实色 · 禁止毛玻璃）
+   ========================================================= */
+.el-input__wrapper, .el-textarea__inner, .el-select__wrapper {
+  background: var(--card) !important;
+  box-shadow: 0 0 0 1px var(--border) inset !important;
+  border-radius: 6px !important;
+}
+.el-input__wrapper:hover, .el-select__wrapper:hover { box-shadow: 0 0 0 1px var(--primary) inset !important; }
+.el-input__wrapper.is-focus, .el-select__wrapper.is-focused { box-shadow: 0 0 0 1px var(--primary) inset !important; }
+.el-input__inner { color: var(--text-main) !important; }
+.el-input__inner::placeholder { color: var(--text-placeholder) !important; opacity: 1; }
+.el-input.is-disabled .el-input__wrapper { background: var(--overlay-subtle) !important; }
+.el-input.is-disabled .el-input__inner {
+  color: var(--text-placeholder) !important;
+  -webkit-text-fill-color: var(--text-placeholder) !important;
+}
+
+/* =========================================================
+   表格（实色 · 禁止毛玻璃）
+   ========================================================= */
+.el-table {
+  background: transparent !important;
+  color: var(--text-main) !important;
+  --el-table-bg-color: transparent;
+  --el-table-tr-bg-color: transparent;
+  --el-table-header-bg-color: var(--card-2);
+  --el-table-border-color: var(--border);
+  --el-table-header-text-color: var(--text-sub);
+  --el-table-text-color: var(--text-main);
+  --el-table-row-hover-bg-color: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+.el-table th.el-table__cell {
+  background: var(--card-2) !important;
+  color: var(--text-sub) !important;
+  font-weight: 600;
+}
+.el-table th.el-table__cell .cell { white-space: nowrap !important; }
+.el-table tr, .el-table td.el-table__cell { background: transparent !important; }
+.el-table--border .el-table__cell { border-color: var(--border) !important; }
+.el-table__empty-block { background: transparent; }
+.el-table__empty-text { color: var(--text-sub); }
+
+.el-pagination {
+  --el-pagination-bg-color: var(--card-2);
+  --el-pagination-button-color: var(--text-main);
+  --el-pagination-hover-color: var(--primary);
+  color: var(--text-main);
+}
+.el-pagination .btn-prev, .el-pagination .btn-next, .el-pager li {
+  background: var(--card-2) !important;
+  color: var(--text-main) !important;
+  border: 1px solid var(--border) !important;
+}
+.el-pager li.is-active {
+  background: var(--primary) !important;
+  color: var(--btn-text) !important;
+  border-color: var(--primary) !important;
+}
+
+/* =========================================================
+   弹窗（毛玻璃）
+   ========================================================= */
+.el-dialog {
+  background: var(--dialog-alpha) !important;
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid var(--border);
+  border-radius: 12px !important;
+  box-shadow: 0 20px 60px -15px rgba(0,0,0,0.25) !important;
+}
+.el-dialog__title { color: var(--text-main) !important; }
+.el-dialog__header { border-bottom: 1px solid var(--border); }
+.el-dialog__body { color: var(--text-main) !important; }
+
+.el-form-item__label { color: var(--text-sub) !important; }
+.el-radio__label, .el-checkbox__label { color: var(--text-main) !important; }
+
+.el-message-box {
+  background: var(--dialog-alpha) !important;
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 20px 60px -15px rgba(0,0,0,0.25) !important;
+}
+.el-message-box__title, .message-box-title { color: var(--text-main) !important; }
+.el-message-box__content { color: var(--text-main) !important; }
+
+/* =========================================================
+   下拉菜单（悬浮卡片 · 毛玻璃）
+   ========================================================= */
+.el-dropdown-menu {
+  background: var(--dropdown-alpha) !important;
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 12px 40px -10px rgba(0,0,0,0.2) !important;
+  padding: 6px !important;
+}
+.el-dropdown-menu__item {
+  color: var(--text-main) !important;
+  border-radius: 6px !important;
+  padding: 7px 12px !important;
+  margin: 2px 0 !important;
+}
+.el-dropdown-menu__item:hover {
+  background: color-mix(in srgb, var(--primary) 14%, transparent) !important;
+  color: var(--primary) !important;
+}
+
+/* 下拉选项（el-select 弹层） */
+.el-select-dropdown {
+  background: var(--dropdown-alpha) !important;
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 12px 40px -10px rgba(0,0,0,0.2) !important;
+}
+.el-select-dropdown__item,
+.el-select-dropdown__item.is-disabled:hover {
+  color: var(--text-main) !important;
+}
+.el-select-dropdown__item:hover,
+.el-select-dropdown__item.hover,
+.el-select-dropdown__item.is-active {
+  background: color-mix(in srgb, var(--primary) 14%, transparent) !important;
+  color: var(--primary) !important;
+}
+.el-select-dropdown__item.selected,
+.el-select-dropdown__item.is-selected {
+  background: var(--primary) !important;
+  color: var(--btn-text) !important;
+  font-weight: 600;
+}
+.el-select-dropdown__item.selected:hover,
+.el-select-dropdown__item.is-selected.is-active {
+  background: var(--primary-hover) !important;
+  color: var(--btn-text) !important;
+}
+
+.el-tag { border: none; }
+/* 分类树 · 实色（禁止毛玻璃） */
+.el-tree {
+  background: transparent !important;
+  color: var(--text-main) !important;
+  --el-tree-node-hover-bg-color: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+.el-tree-node__content:hover { background: color-mix(in srgb, var(--primary) 8%, transparent) !important; }
+
+.el-tabs__item { color: var(--text-sub) !important; }
+.el-tabs__item.is-active { color: var(--primary) !important; }
+.el-tabs__active-bar { background: var(--primary) !important; }
+.el-tabs__nav-wrap::after { background: var(--border) !important; }
+
+.el-statistic__head { color: var(--text-sub) !important; }
+.el-statistic__number { color: var(--text-main) !important; }
+
+.el-divider { border-color: var(--border) !important; }
+
+.el-date-editor.el-input__wrapper { background: var(--card) !important; }
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .page-card { padding: 12px; border-radius: 8px; }
+  .page-title { font-size: 16px; }
+  .toolbar { gap: 8px; }
+  .el-table { font-size: 12px; }
+}
