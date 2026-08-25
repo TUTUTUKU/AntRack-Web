@@ -1,0 +1,25 @@
+name: Build Multi‑Arch Docker Image
+
+stages:
+  - build
+
+build_docker:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  variables:
+    DOCKER_BUILDKIT: 1
+  script:
+    - apk add --no-cache git
+    - docker login -u ${GITEE_USER} -p ${GITEE_TOKEN} shturl.cc
+    # 构建双架构，构建完成推送到Gitee私有镜像仓库
+    - docker buildx create --use
+    - docker buildx build
+        --platform linux/amd64,linux/arm64
+        -t shturl.cc/tututuku/antrack‑web:${CI_COMMIT_SHORT_SHA}
+        -t shturl.cc/tututuku/antrack‑web:latest
+        --push
+        ./backend
+  only:
+    - main

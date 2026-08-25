@@ -3,7 +3,8 @@
 # 构建: docker build -t antrack/backend:latest .
 # 单容器: docker run -d --name antrack-backend -p 8000:8000 -v ./data:/app/data -v ./static:/app/static antrack/backend:latest
 # 推荐:   用同目录下 docker-compose up -d (带卷 + 健康检查 + 重启)
-FROM python:3.10-slim
+FROM hub-mirror.c.163.com/library/python:3.10-slim
+
 
 # 时区固定为 Asia/Shanghai（日志 / JWT 过期时间都按北京时间走）
 ENV TZ=Asia/Shanghai \
