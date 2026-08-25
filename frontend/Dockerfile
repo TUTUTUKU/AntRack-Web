@@ -1,7 +1,7 @@
 # 前端 Dockerfile：多阶段构建（Node 构建 + Nginx 部署）
 
 # ===== 阶段1：构建 =====
-FROM hub.aliyuncs.com/library/node:18-alpine
+FROM hub.aliyuncs.com/library/node:18-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install --registry https://registry.npmmirror.com
