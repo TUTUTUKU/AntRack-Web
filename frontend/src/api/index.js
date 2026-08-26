@@ -59,3 +59,14 @@ export const exportMaterial = () => request.get('/api/export/material', { respon
 export const exportStockLog = (params) => request.get('/api/export/stock-log', { params, responseType: 'blob' })
 export const exportProject = (id) => request.get(`/api/export/project/${id}`, { responseType: 'blob' })
 export const exportProjectList = () => request.get('/api/export/project-list', { responseType: 'blob' })
+
+// ========== 数据备份与恢复 ==========
+// 一键下载备份（.antrack = zip，仅含业务表，不含用户）
+export const exportBackup = () => request.get('/api/backup/export', { responseType: 'blob' })
+// 上传 .antrack 备份并恢复业务数据（管理员专用）
+export const restoreBackup = (formData, onUploadProgress) =>
+  request.post('/api/backup/restore', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress,
+    timeout: 0  // 大文件上传不超时
+  })

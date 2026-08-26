@@ -13,7 +13,7 @@ from core.response import fail
 
 app = FastAPI(
     title="蚁仓 Ant Rack System (ANS)",
-    description="V1.0 · 制作者 TUTUTUKU · 项目编号 TK01",
+    description="V1.0 · 制作者 TUTUTUKU · 项目编号 TK02",
     version="1.0.0",
 )
 

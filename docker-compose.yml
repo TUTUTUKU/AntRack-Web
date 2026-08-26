@@ -1,5 +1,5 @@
 # 蚁仓 Ant Rack System (ANS) V1.0 — Docker Compose 一键部署
-# 制作者：TUTUTUKU  项目编号：TK01  工程名：AntRack
+# 制作者：TUTUTUKU  项目编号：TK02  工程名：AntRack
 # 适配：NAS / AIO 主机 / Windows Docker Desktop / Linux 服务器 · 7×24 小时挂机
 # 架构：✅ linux/amd64（x86 PC / 服务器）  ✅ linux/arm64（树莓派 4B+ / 飞牛 / 极空间 / Mac M 系列）
 # 基础镜像均为 Docker Hub 官方多架构镜像，buildx 可同时产出两种架构
@@ -14,6 +14,16 @@
 #   看日志 : docker compose logs -f backend / frontend
 #   卸载   : docker compose down          (只删容器，不删 data/static 数据卷)
 # ============================================================
+# 【用法三】Ubuntu / 服务器拉取 GitHub 已编译镜像更新（无需本地构建）
+#   首次部署：git clone 本仓库 → cd antrack-web
+#   以后每次更新（数据不丢）：
+#     git pull                                   # 拉取最新 compose 配置
+#     docker compose pull backend frontend       # 拉取 GHCR 最新镜像
+#     docker compose up -d --force-recreate      # 用新镜像重启容器
+#   镜像地址：ghcr.io/tututuku/antrack-backend:latest
+#             ghcr.io/tututuku/antrack-frontend:latest
+#   说明：image 与 build 共存时，pull 优先拉远程镜像，本地 --build 才构建
+# ============================================================
 # 【用法二】多架构镜像（同时出 amd64 + arm64，推送到私有/公共仓库后任意机器拉取）
 #   Windows / Mac（Docker Desktop 自带 buildx）：
 #     1) docker buildx create --use --name antrack-builder  (首次只需一次)
@@ -27,6 +37,24 @@
 #       ANTRACK_DEFAULT_ADMIN_PASSWORD=<改掉默认 admin123>
 #   - 部署后立刻登录 → 系统设置 → 修改密码
 # ============================================================
+# 【更新镜像铁规 —— 100% 不丢旧数据】
+#   ① 更新前先在系统设置里点一次「数据备份与恢复 → 下载备份」
+#      把 .antrack 文件另存到本地电脑（双重保险，回滚兜底）
+#   ② 拉/建新镜像（只动镜像层，不碰容器与数据卷）：
+#        docker compose build --no-cache backend frontend
+#        # 或拉远程镜像：docker compose pull backend frontend
+#   ③ 逐个重启服务（保留数据卷，只替换容器层代码）：
+#        docker compose up -d --force-recreate backend
+#        docker compose up -d --force-recreate frontend
+#   ④ 验证：浏览器打开 http://<本机IP>:8080 看仪表盘数据是否还在
+#   ❌ 绝对禁止：docker compose down -v          （-v 会删命名卷，数据清零）
+#   ❌ 绝对禁止：docker volume rm antrack_*      （同上）
+#   ❌ 绝对禁止：在 Portainer 里点「删除数据卷」  （同上）
+#   ❌ 绝对禁止：把 backend/data/*.db 写进 Dockerfile 的 COPY
+#               （镜像内自带空 DB，第一次启动可能覆盖挂载点的真实数据）
+#   ✅ 安全做法：永远用 volumes 挂载 ./backend/data 与 ./backend/static
+#               代码更新只重建镜像并 up -d 重启，绝不动数据卷
+# ============================================================
 version: "3.8"
 
 services:
@@ -37,7 +65,7 @@ services:
       # 如需强制指定架构（例如在 amd64 机器上交叉构建 arm64 镜像），取消下行注释并改成目标平台：
       # platforms:
       #   - "linux/arm64"
-    image: antrack/backend:latest
+    image: ghcr.io/tututuku/antrack-backend:latest
     container_name: antrack-backend
     restart: always
     # ===== 生产环境密钥注入（示例，去掉 # 即可生效）=====
@@ -70,7 +98,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    image: antrack/frontend:latest
+    image: ghcr.io/tututuku/antrack-frontend:latest
     container_name: antrack-frontend
     restart: always
     depends_on:
