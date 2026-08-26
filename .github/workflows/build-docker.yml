@@ -1,4 +1,8 @@
-name: Build Multi‑Arch Docker and Publish Artifacts
+name: Build & Push Multi-Arch Docker Images
+
+# 触发：push 到 main 分支 / 手动运行
+# 产物：backend + frontend 两个镜像，同时支持 amd64 + arm64，推送到 GHCR
+# Ubuntu 拉取：docker compose pull backend frontend && docker compose up -d --force-recreate
 
 on:
   push:
@@ -6,127 +10,48 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write
+  contents: read
   packages: write
 
 jobs:
-  # 1) 可选：保持 multi-arch 构建并 push 到 GHCR（如果不需要可以移除）
   build-and-push:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 同时构建后端 + 前端两个镜像（并行跑，互不阻塞）
+        service: [backend, frontend]
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Setup QEMU for multi‑arch
+      # GHCR 要求镜像名全小写，仓库 owner 可能含大写字母，先转小写
+      - name: Lowercase owner (GHCR 要求镜像名全小写)
+        run: echo "OWNER_LC=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
+      - name: Setup QEMU for multi-arch
         uses: docker/setup-qemu-action@v3
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login GHCR
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & Push multi-arch image
+      # 构建多架构镜像并推送，打两个标签：latest + commit 短 SHA（方便回滚）
+      - name: Build & Push ${{ matrix.service }} (amd64 + arm64)
         uses: docker/build-push-action@v6
         with:
-          context: ./frontend
+          context: ./${{ matrix.service }}
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/tututuku/antrack-web:latest
-
-  # 2) 为每个平台单独构建并上传为 workflow artifact（供后续下载或发布）
-  build-artifacts:
-    runs-on: ubuntu-latest
-    needs: build-and-push
-    strategy:
-      matrix:
-        include:
-          - arch: amd64
-            platform: linux/amd64
-          - arch: arm64
-            platform: linux/arm64
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
-
-      - name: Setup QEMU for multi‑arch
-        uses: docker/setup-qemu-action@v3
-
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build image for ${{ matrix.platform }} and load to local docker
-        uses: docker/build-push-action@v6
-        with:
-          context: ./frontend
-          platforms: ${{ matrix.platform }}
-          push: false
-          load: true
-          tags: ghcr.io/tututuku/antrack-web:${{ matrix.arch }}
-
-      - name: Save image to tar
-        run: |
-          docker save ghcr.io/tututuku/antrack-web:${{ matrix.arch }} -o antrack-web-${{ matrix.arch }}.tar
-
-      - name: Compress image tar
-        run: gzip -f antrack-web-${{ matrix.arch }}.tar
-
-      - name: Upload tar.gz artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: antrack-web-${{ matrix.arch }}.tar.gz
-          path: antrack-web-${{ matrix.arch }}.tar.gz
-
-  # 3) 下载上面两个 artifact，并把它们作为 Release asset 上传到仓库 Releases 页面
-  publish-release:
-    runs-on: ubuntu-latest
-    needs: build-artifacts
-    steps:
-      - name: Download amd64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: antrack-web-amd64.tar.gz
-          path: ./artifacts
-
-      - name: Download arm64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: antrack-web-arm64.tar.gz
-          path: ./artifacts
-
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: artifacts-${{ github.run_id }}
-          release_name: artifacts-${{ github.run_id }}
-          body: |
-            Platform artifacts (amd64/arm64) for run ${{ github.run_id }}.
-          draft: false
-          prerelease: false
-
-      - name: Upload amd64 asset to Release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./artifacts/antrack-web-amd64.tar.gz
-          asset_name: antrack-web-amd64.tar.gz
-          asset_content_type: application/gzip
-
-      - name: Upload arm64 asset to Release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./artifacts/antrack-web-arm64.tar.gz
-          asset_name: antrack-web-arm64.tar.gz
-          asset_content_type: application/gzip
+          tags: |
+            ghcr.io/${{ env.OWNER_LC }}/antrack-${{ matrix.service }}:latest
+            ghcr.io/${{ env.OWNER_LC }}/antrack-${{ matrix.service }}:${{ github.sha }}
+          # 用 GitHub Actions 缓存加速后续构建
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

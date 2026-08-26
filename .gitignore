@@ -11,6 +11,14 @@ backend/data/*.db-shm
 backend/data/*.sqlite
 backend/data/*.sqlite3
 
+# ---------- 上传图片/物料图片（用户运行时产生，绝对不能提交！）----------
+backend/static/*.png
+backend/static/*.jpg
+backend/static/*.jpeg
+backend/static/*.gif
+backend/static/*.webp
+backend/static/*.bmp
+
 # ---------- Python / FastAPI 后端 ----------
 backend/__pycache__/
 backend/**/__pycache__/
