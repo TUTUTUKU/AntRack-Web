@@ -1,10 +1,10 @@
-# <img width="25" height="28" alt="logo" src="https://github.com/user-attachments/assets/c3697995-b0e5-42c6-ac61-f5ebd9a8417b" /> 蚁仓 Ant Rack System (ANS) V1.1.1
-
-> **全品类物料 · 项目 · 库存管理系统**
->
-> 网页端 + 移动端 App（开发中）
->
-> 制作者：TUTUTUKU · 项目编号 TK02
+<div align="center">
+  <img src="docs/logo.png" alt="蚁仓 Logo" width="200" style="border-radius: 24px;">
+  <h1>蚁仓 Ant Rack System (ANS)</h1>
+  <p><strong>全品类物料 · 项目 · 库存管理系统</strong></p>
+  <p>网页端 + 移动端 App（开发中）</p>
+  <p>制作者：TUTUTUKU · 项目编号 TK02 · 当前版本 V1.1.1</p>
+</div>
 
 ---
 
@@ -21,8 +21,8 @@
 - **项目用料追踪**：给项目建一个「物料清单（BOM）」，项目做到一半也不会忘记「还差哪几样、还剩多少」。
 - **轻松本地部署**：可以在自己电脑后台长期运行，也能装到 NAS、软路由或任意 Linux 服务器上 7×24 小时挂着。
 - **数据自己掌控**：数据全部存在你自己的电脑/服务器里，不会上传到任何云端；还能一键导出备份文件，误操作了随时还原。
-- **上手难度超低**：界面简单明了，菜单分级简练。浏览器打开就能用，没有复杂的权限和配置，默认一个管理员账号管全部。
-* **扩展**：未来增加 App 功能，可以手机操作，扫码匹配，轻量管理。
+- **上手难度超低**：界面简单明了，菜单分级简练。浏览器直接打开就能用，没有复杂的权限和配置，默认一个管理员账号管全部。
+- **未来扩展**：未来增加 App 功能，可以手机操作，扫码匹配，轻量管理。
 
 ### 它适合用来做什么？
 
@@ -33,6 +33,60 @@
 | **模型 / RC / 3D 打印** | 零件种类多、数量碎，扫一下就知道剩多少 |
 | **道具 / 服装 / 影视制作** | 项目多、物料杂，BOM 帮你把每个项目的配套清单锁死 |
 | **学校 / 社团 / 实验室** | 多人共用耗材，出库一查就知道「谁领了多少、用在哪个项目」 |
+
+---
+
+## 🖼 功能预览
+
+### 1 · 仪表盘：物料 / 项目 / 流水 / 库存总值一眼全览
+
+![仪表盘](docs/screenshots/01_dashboard_empty.png)
+
+有数据后的仪表盘，低库存预警、最近流水、项目进度一目了然：
+
+![仪表盘-有数据](docs/screenshots/10_dashboard_with_data.png)
+
+### 2 · 物料管理：全品类建档、扫码即用
+
+物料列表，按一/二级分类筛选，支持搜索、批量导出：
+
+![物料列表](docs/screenshots/02_material_list.png)
+
+物料详情页，入库、出库、编辑、打印二维码、查看历史流水，一应俱全：
+
+![物料详情](docs/screenshots/03_material_detail.png)
+
+编辑物料，图片、编码、规格、单位、币种、告警阈值完整字段：
+
+![编辑物料](docs/screenshots/04_material_edit.png)
+
+### 3 · 分类管理：两级分类，层级清晰
+
+![分类管理](docs/screenshots/05_category_manager.png)
+
+### 4 · 项目管理：BOM 清单 + 三状态闭环（准备 → 制作 → 已归档）
+
+项目列表，支持创建、进入详情、编辑、删除、归档：
+
+![项目列表-有数据](docs/screenshots/09_project_list_with_data.png)
+
+新建项目，名称 + 简介 + 资料链接（比如 GitHub 仓库）：
+
+![新建项目](docs/screenshots/07_project_create.png)
+
+项目详情，BOM 物料清单 + 状态切换 + 项目流水 + 导出 BOM：
+
+![项目详情-BOM](docs/screenshots/08_project_detail_bom.png)
+
+### 5 · 库存流水：每一笔入库 / 出库 / 临时出库都可追溯
+
+![库存流水](docs/screenshots/12_stock_logs.png)
+
+### 6 · 系统设置：改密码、换主题、一键备份 / 恢复、查看版本
+
+6 套主题可选（默认深曜暗夜），一键下载 / 上传 `.antrack` 备份，更新迁移不用怕：
+
+![系统设置](docs/screenshots/11_system_settings.png)
 
 ---
 
