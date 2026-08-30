@@ -72,16 +72,8 @@
           <template #default="{ row }">
             <div class="bk-op-cell">
               <el-button size="small" class="bk-dl" @click="onDownload(row)">下载</el-button>
-              <el-popconfirm title="确定从该备份恢复吗？当前数据将被覆盖（不可撤销）。" @confirm="onRestoreFrom(row)">
-                <template #reference>
-                  <el-button size="small" class="bk-restore">恢复</el-button>
-                </template>
-              </el-popconfirm>
-              <el-popconfirm title="确定删除该备份吗？文件将从服务端永久删除。" @confirm="onDelete(row)">
-                <template #reference>
-                  <el-button size="small" class="bk-del">删除</el-button>
-                </template>
-              </el-popconfirm>
+              <el-button size="small" class="bk-restore" @click="onRestoreFrom(row)">恢复</el-button>
+              <el-button size="small" class="bk-del" @click="onDelete(row)">删除</el-button>
             </div>
           </template>
         </el-table-column>
@@ -165,6 +157,13 @@ async function onDownload(row) {
 
 async function onDelete(row) {
   try {
+    await ElMessageBox.confirm(
+      `确定删除备份「${row.name}」吗？\n文件将从服务端永久删除，此操作不可撤销。`,
+      '删除确认',
+      { type: 'error', confirmButtonText: '确认删除', cancelButtonText: '取消' }
+    )
+  } catch (e) { return }
+  try {
     await deleteBackupSnapshot(row.id)
     ElMessage.success('已删除')
     reload()
@@ -172,6 +171,13 @@ async function onDelete(row) {
 }
 
 async function onRestoreFrom(row) {
+  try {
+    await ElMessageBox.confirm(
+      `确定从备份「${row.name}」恢复吗？\n当前数据将被覆盖，此操作不可撤销。`,
+      '恢复确认',
+      { type: 'warning', confirmButtonText: '确认恢复', cancelButtonText: '取消' }
+    )
+  } catch (e) { return }
   try {
     const r = await restoreFromSnapshot(row.id)
     ElMessage.success((r.msg || '恢复成功') + '，请稍等片刻，系统正在重新拉取最新数据')
