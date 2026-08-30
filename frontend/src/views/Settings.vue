@@ -44,7 +44,7 @@
               <el-icon><Files /></el-icon>备份与恢复
             </div>
             <div class="l2-item" :class="{ active: activeL2 === 'auto-backup' }" @click="activeL2 = 'auto-backup'">
-              <el-icon><Timer /></el-icon>自动备份
+              <el-icon><Timer /></el-icon>自动备份设置
             </div>
           </div>
         </div>
@@ -190,7 +190,7 @@
 
         <!-- 自动备份 -->
         <template v-else-if="activeL2 === 'auto-backup'">
-          <h3 class="sub-title"><el-icon><Timer /></el-icon>自动备份</h3>
+          <h3 class="sub-title"><el-icon><Timer /></el-icon>自动备份设置</h3>
           <div class="data-card">
             <p class="hint">每周一白天自动备份。</p>
             <div class="cfg-row">
