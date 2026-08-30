@@ -317,6 +317,26 @@ a { color: var(--primary); text-decoration: none; }
 .el-message-box__title, .message-box-title { color: var(--text-main) !important; }
 .el-message-box__content { color: var(--text-main) !important; }
 
+/* el-popconfirm 和 ElMessageBox 的确认/取消按钮：并列、双色、等宽 */
+.el-popconfirm__action {
+  display: flex !important;
+  gap: 10px !important;
+  justify-content: flex-end !important;
+}
+.el-popconfirm__action .el-button {
+  min-width: 72px !important;
+  margin-left: 0 !important;
+}
+.el-message-box__btns {
+  display: flex !important;
+  gap: 10px !important;
+  justify-content: flex-end !important;
+}
+.el-message-box__btns .el-button {
+  min-width: 88px !important;
+  margin-left: 0 !important;
+}
+
 /* =========================================================
    下拉菜单（悬浮卡片 · 毛玻璃）
    ========================================================= */

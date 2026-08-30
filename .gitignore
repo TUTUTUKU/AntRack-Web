@@ -17,6 +17,7 @@ backend/data/*.sqlite3
 
 # ---------- 备份快照（运行时产生，不提交）----------
 backend/data/backups/*.antrack
+backend/data/backups/*.ans
 
 # ---------- 上传图片/物料图片（用户运行时产生，绝对不能提交！）----------
 backend/static/*.png
