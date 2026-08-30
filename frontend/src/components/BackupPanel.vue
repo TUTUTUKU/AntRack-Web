@@ -7,7 +7,7 @@
       </p>
       <div class="actions">
         <el-button type="primary" :loading="creating" @click="onCreate">
-          <el-icon><Plus /></el-icon>备份当前数据
+          <el-icon><Download /></el-icon>备份当前数据
         </el-button>
         <el-upload
           ref="uploadRef"
@@ -105,7 +105,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Upload, Files, Refresh } from '@element-plus/icons-vue'
+import { Download, Upload, Files, Refresh } from '@element-plus/icons-vue'
 import {
   listBackupSnapshots,
   createBackupSnapshot,
