@@ -3,7 +3,7 @@
   <h1>蚁仓 Ant Rack System (ANS)</h1>
   <p><strong>全品类物料 · 项目 · 库存管理系统</strong></p>
   <p>网页端 + 移动端 App（开发中）</p>
-  <p>制作者：TUTUTUKU · 项目编号 TK02 · 当前版本 V1.1.1</p>
+  <p>制作者：TUTUTUKU · 项目编号 TK02 · 当前版本 V1.3.1</p>
 </div>
 
 ---
