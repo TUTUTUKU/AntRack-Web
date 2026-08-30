@@ -7,12 +7,12 @@ import App from './App.vue'
 import router from './router'
 import './styles/global.css'
 import { initTheme } from './utils/themes'
+import * as ws from './utils/ws'
 
 initTheme()
 
 const app = createApp(App)
 
-// 注册全部图标
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
   app.component(key, component)
 }
@@ -20,3 +20,10 @@ for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
 app.use(ElementPlus, { locale: zhCn })
 app.use(router)
 app.mount('#app')
+
+// V1.2：登录态存在就启动 WS（多端冲突/恢复/配置事件）
+const token = localStorage.getItem('token')
+if (token) ws.connect()
+
+// 暴露到全局，方便登录页登录后 connect
+window.__antrack_ws = ws

@@ -7,5 +7,13 @@ from models.project import Project
 from models.project_bom import ProjectBom
 from models.stock_log import StockLog
 from models.license import License
+from models.user_config import UserConfig
+from models.conflict import Conflict
+from models.backup_snapshot import BackupSnapshot
+from models.operation_log import OperationLog
+from models.global_stage import GlobalStage
 
-__all__ = ["User", "Category", "Material", "Project", "ProjectBom", "StockLog", "License"]
+__all__ = [
+    "User", "Category", "Material", "Project", "ProjectBom", "StockLog", "License",
+    "UserConfig", "Conflict", "BackupSnapshot", "OperationLog", "GlobalStage",
+]

@@ -39,15 +39,36 @@
         ref="tableRef"
         @selection-change="onSelectionChange"
       >
-        <el-table-column
-          v-if="manageMode"
-          type="selection"
-          width="50"
-          align="center"
-          fixed="right"
-          class-name="sel-col"
-        />
-        <el-table-column prop="create_time" label="时间" width="160" />
+        <el-table-column type="selection" width="50" align="center" fixed="right" class-name="sel-col" v-if="manageMode" />
+        <el-table-column label="业务时间" width="170">
+          <template #default="{ row }">
+            <div class="ts-cell">
+              <div class="ts-main">{{ row.server_commit_ts || row.create_time }}</div>
+              <div v-if="row.local_device_ts" class="ts-sub" title="设备原始本地时间，仅供参考">
+                设备时间 {{ row.local_device_ts }}
+              </div>
+              <div v-if="row.time_correction_flag === 'forced'" class="ts-flag ts-flag-forced">时间校正：强制</div>
+              <div v-else-if="row.time_correction_flag === 'ok'" class="ts-flag ts-flag-ok">时间校正：正常</div>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="来源" width="80" align="center">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.source === 'app' ? 'primary' : 'success'" effect="light">
+              {{ row.source === 'app' ? 'APP' : 'Web' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="80" align="center">
+          <template #default="{ row }">
+            <template v-if="row.invalid || row.revoke_status === 'revoked'">
+              <el-tag size="small" type="info" effect="plain">已撤销</el-tag>
+            </template>
+            <template v-else>
+              <el-tag size="small" type="success" effect="plain">有效</el-tag>
+            </template>
+          </template>
+        </el-table-column>
         <el-table-column prop="material_name" label="物料名称" min-width="140" show-overflow-tooltip />
         <el-table-column label="流水类型" width="100">
           <template #default="{ row }"><el-tag :type="tagType(row.log_type)" size="small">{{ row.log_type_name }}</el-tag></template>
@@ -67,12 +88,21 @@
         <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
         <el-table-column
           label="操作"
-          :width="manageMode ? 160 : 80"
+          :width="manageMode ? 220 : 170"
           fixed="right"
           class-name="op-col"
         >
           <template #default="{ row }">
             <div class="op-cell">
+              <el-button
+                v-if="row.can_undo && row.revoke_status === 'ok' && !row.invalid"
+                type="warning"
+                size="small"
+                class="op-undo"
+                @click="onUndo(row)"
+              >
+                <el-icon><RefreshLeft /></el-icon>撤销
+              </el-button>
               <el-button size="small" class="op-view" @click="peek(row)">详情</el-button>
               <el-button
                 v-if="manageMode"
@@ -95,7 +125,7 @@
       />
     </div>
 
-    <!-- 身份验证弹窗：点击"管理"时弹出，先验证账号密码 -->
+    <!-- 管理模式身份验证 -->
     <el-dialog
       v-model="authVisible"
       title="进入管理模式 · 身份验证"
@@ -127,13 +157,14 @@
 <script setup>
 import { ref, computed, reactive, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Download, Tickets, Setting, Check, Delete } from '@element-plus/icons-vue'
+import { Download, Tickets, Setting, Check, Delete, RefreshLeft } from '@element-plus/icons-vue'
 import {
   getStockLogList,
   getAllMaterials,
   exportStockLog,
   deleteStockLog,
   deleteStockLogBatch,
+  undoStockLog,
   login,
 } from '@/api'
 import { downloadBlob } from '@/utils/file'
@@ -150,7 +181,7 @@ const dateRange = ref([])
 const materialOptions = ref([])
 const tableRef = ref(null)
 
-// 管理模式 + 选中
+// 管理模式
 const manageMode = ref(false)
 const selectedRows = ref([])
 const selectedIds = computed(() => selectedRows.value.map(r => r.id))
@@ -227,9 +258,7 @@ function peek(row) {
   )
 }
 
-// =========================================================
 // 管理模式：先校验密码，再开启
-// =========================================================
 function openAuthDialog() {
   authForm.username = localStorage.getItem('username') || 'admin'
   authForm.password = ''
@@ -247,7 +276,6 @@ async function onAuthSubmit() {
   try {
     // 调用登录接口做账号密码二次校验（不替换现有 token，仅验证）
     await login({ username: authForm.username, password: authForm.password })
-    // 验证通过：进入管理模式
     manageMode.value = true
     authVisible.value = false
     ElMessage.success('身份验证通过，已进入管理模式，可批量选择并删除流水')
@@ -280,6 +308,24 @@ function onBatchDelete() {
       loadData()
     } catch (e) {}
   }).catch(() => {})
+}
+
+// V1.2：5 分钟内可撤销
+async function onUndo(row) {
+  try {
+    await ElMessageBox.confirm(
+      `确定撤销该条流水吗？\n时间：${row.server_commit_ts || row.create_time}\n物料：${row.material_name}\n类型：${row.log_type_name}\n撤销后会生成反向补偿流水并标记原流水失效。`,
+      '撤销确认',
+      { type: 'warning', confirmButtonText: '确认撤销', cancelButtonText: '取消' }
+    )
+  } catch (e) {
+    return
+  }
+  try {
+    await undoStockLog(row.id)
+    ElMessage.success('撤销成功，已生成反向补偿流水')
+    loadData()
+  } catch (e) {}
 }
 
 onMounted(async () => {
@@ -343,4 +389,15 @@ onMounted(async () => {
   border-color: color-mix(in srgb, var(--danger) 40%, transparent) !important;
   color: var(--danger) !important;
 }
+.op-undo {
+  background: color-mix(in srgb, var(--warning) 24%, transparent) !important;
+  border-color: color-mix(in srgb, var(--warning) 36%, transparent) !important;
+  color: var(--warning) !important;
+}
+.ts-cell { display: flex; flex-direction: column; gap: 2px; }
+.ts-main { font-weight: 600; color: var(--text-main); font-size: 13px; }
+.ts-sub { font-size: 11px; color: var(--text-sub); }
+.ts-flag { font-size: 11px; display: inline-block; padding: 0 6px; border-radius: 3px; align-self: flex-start; }
+.ts-flag-ok { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); }
+.ts-flag-forced { background: color-mix(in srgb, var(--warning) 20%, transparent); color: var(--warning); font-weight: 600; }
 </style>

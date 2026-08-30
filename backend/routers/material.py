@@ -49,6 +49,8 @@ def _enrich(m: Material, db: Session) -> dict:
         "parent_category_name": parent_category_name,
         "create_time": m.create_time.strftime("%Y-%m-%d %H:%M:%S") if m.create_time else "",
         "update_time": m.update_time.strftime("%Y-%m-%d %H:%M:%S") if m.update_time else "",
+        "server_commit_ts": (m.server_commit_ts.strftime("%Y-%m-%d %H:%M:%S")
+                             if getattr(m, "server_commit_ts", None) else "") or "",
     }
 
 
@@ -126,13 +128,12 @@ def save(data: MaterialIn, db: Session = Depends(get_db), _: object = Depends(ge
     if not cat:
         return fail("物料必须绑定有效的二级分类")
 
-    # 编码：未传入或为空时自动生成
+    # 未传编码时自动生成
     code = (data.code or "").strip()
     if not code:
         code = _generate_next_code(db)
 
-    # 处理初始库存：init_stock > 0 时写入初始库存并生成一条入库流水
-    # init_cost 语义：初始入库单价
+    # 初始库存：init_stock > 0 时写一条入库流水（init_cost 为初始入库单价）
     init_num = data.init_stock or 0.0
     init_price = data.init_cost or 0.0
     init_cost_total = round(init_num * init_price, 6)
@@ -155,7 +156,7 @@ def save(data: MaterialIn, db: Session = Depends(get_db), _: object = Depends(ge
     db.add(m)
     db.flush()
 
-    # 初始库存 > 0 时写一条入库流水（符合"库存仅流水驱动"铁规）
+    # 库存仅由流水驱动，初始库存 > 0 必须写一条入库流水
     if init_num > 0:
         log = StockLog(
             material_id=m.id,
