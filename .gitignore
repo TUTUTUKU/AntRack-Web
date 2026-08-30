@@ -4,12 +4,19 @@
 # ============================================================
 
 # ---------- 数据库（最关键：绝对不能提交！）----------
+backend/*.db
+backend/*.db-journal
+backend/*.db-wal
+backend/*.db-shm
 backend/data/*.db
 backend/data/*.db-journal
 backend/data/*.db-wal
 backend/data/*.db-shm
 backend/data/*.sqlite
 backend/data/*.sqlite3
+
+# ---------- 备份快照（运行时产生，不提交）----------
+backend/data/backups/*.antrack
 
 # ---------- 上传图片/物料图片（用户运行时产生，绝对不能提交！）----------
 backend/static/*.png

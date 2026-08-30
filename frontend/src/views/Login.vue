@@ -44,6 +44,8 @@ function onLogin() {
       localStorage.setItem('token', res.data.token)
       localStorage.setItem('username', res.data.username)
       ElMessage.success('登录成功')
+      // V1.2：登录成功启动 WS，接收冲突/恢复事件
+      try { window.__antrack_ws && window.__antrack_ws.connect() } catch (e) {}
       router.push('/dashboard')
     } catch (e) {
       // 错误已在拦截器提示

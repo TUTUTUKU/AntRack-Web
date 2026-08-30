@@ -34,6 +34,7 @@ class MaterialOut(BaseModel):
     usable_stock: float = 0.0
     category_name: str = ""
     parent_category_name: str = ""
+    server_commit_ts: str = ""
 
     class Config:
         from_attributes = True

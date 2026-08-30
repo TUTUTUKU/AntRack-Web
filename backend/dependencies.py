@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-"""
-鉴权依赖：支持管理员 (user token) 与 App 设备 (device token) 双通道。
+"""鉴权依赖：支持管理员 (user token) 与 App 设备 (device token) 双通道。
+
 - 管理员 token：payload {sub=username, type=user} → 查 User 表
 - 设备 token：payload {device_id, type=device} → 返回 Principal 伪对象
-现有路由全部用 `_: object = Depends(get_current_user)` 忽略返回值，
-因此升级为双通道不破坏任何现有调用。
+
+现有路由都用 `_: object = Depends(get_current_user)` 忽略返回值，
+升级为双通道不破坏任何现有调用。
 """
 from dataclasses import dataclass
 from fastapi import Depends, HTTPException, status
@@ -29,11 +30,35 @@ class Principal:
     device_id: str = ""
 
 
+def principal_username(principal: object) -> str:
+    """统一从 User 或 Principal 取出写入数据库用的「操作人」字符串。"""
+    if principal is None:
+        return ""
+    if isinstance(principal, Principal):
+        return principal.username or "app"
+    try:
+        uname = getattr(principal, "username", None)
+        if uname:
+            return str(uname)
+    except Exception:
+        pass
+    try:
+        return str(principal)
+    except Exception:
+        return ""
+
+
+def is_admin_user(principal: object) -> bool:
+    """是否管理员（User 对象）；device Principal 不算管理员。"""
+    from models.user import User
+    return isinstance(principal, User)
+
+
 def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> object:
-    """解析 Token 并返回当前主体（User 或 Principal）；未登录/无效抛 401"""
+    """解析 Token 返回当前主体（User 或 Principal）；未登录或无效抛 401。"""
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

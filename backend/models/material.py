@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-# models/material.py
 from sqlalchemy import Column, Integer, String, Float, DateTime
 from datetime import datetime
 from database import Base
@@ -26,3 +25,4 @@ class Material(Base):
 
     create_time = Column(DateTime, default=datetime.now, nullable=False)
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+    server_commit_ts = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)  # 业务真实生效时间（服务端时间），界面优先展示
