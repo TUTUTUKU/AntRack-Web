@@ -121,23 +121,27 @@ def _gen_full_backup_zip(db: Session, *, trigger: str = "manual", note: str = ""
 
     dir_path = BASE_DIR / _SNAPSHOT_SUBDIR
     dir_path.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"antrack_backup_{trigger}_{ts}.antrack"
-    rel_path = f"{_SNAPSHOT_SUBDIR}/{filename}"
-    full_path = BASE_DIR / rel_path
-    full_path.write_bytes(data_bytes)
+    src = "app" if "app" in trigger else "web"
     file_size = len(data_bytes)
 
     snap = BackupSnapshot(
         trigger=trigger,
         version_x=ver[0], version_y=ver[1], version_z=ver[2],
-        file_path=rel_path,
+        file_path="",
         file_size=file_size,
         note=note or "",
     )
     db.add(snap)
     db.flush()
     db.refresh(snap)
+
+    filename = f"{src}_{snap.id:04d}.ans"
+    rel_path = f"{_SNAPSHOT_SUBDIR}/{filename}"
+    full_path = BASE_DIR / rel_path
+    full_path.write_bytes(data_bytes)
+
+    snap.file_path = rel_path
+    db.flush()
     return {
         "snapshot_id": snap.id,
         "relative_path": rel_path,
@@ -149,8 +153,10 @@ def _gen_full_backup_zip(db: Session, *, trigger: str = "manual", note: str = ""
 
 def _snap_out(s: BackupSnapshot) -> dict:
     ver = f"{s.version_x}.{s.version_y}.{s.version_z}"
+    src = "APP" if "app" in (s.trigger or "") else "WEB"
     return {
         "id": s.id,
+        "name": f"{src}#{s.id}",
         "trigger": s.trigger,
         "version": ver,
         "file_path": s.file_path or "",
@@ -168,12 +174,27 @@ def list_snapshots(
     page: int = 1,
     page_size: int = 20,
     trigger: str = "",
+    trigger_type: str = "",
+    source: str = "",
     db: Session = Depends(get_db),
     _: object = Depends(get_current_user),
 ):
+    """列表支持两个维度筛选：
+    - trigger_type: manual（手动）/ auto（自动）
+    - source: web / app（按备份文件名前缀区分来源）
+    兼容旧的 trigger 精确匹配参数。
+    """
     q = db.query(BackupSnapshot)
     if trigger:
         q = q.filter(BackupSnapshot.trigger == trigger)
+    if trigger_type == "manual":
+        q = q.filter(BackupSnapshot.trigger.in_(["manual", "app_manual"]))
+    elif trigger_type == "auto":
+        q = q.filter(BackupSnapshot.trigger.in_(["auto", "weekly", "after_proofread"]))
+    if source == "web":
+        q = q.filter(~BackupSnapshot.trigger.like("app%"))
+    elif source == "app":
+        q = q.filter(BackupSnapshot.trigger.like("app%"))
     total = q.count()
     items = q.order_by(BackupSnapshot.id.desc()).offset((page-1)*page_size).limit(page_size).all()
     return success({
@@ -195,7 +216,7 @@ def export_backup(
     db: Session = Depends(get_db),
     user: object = Depends(get_current_user),
 ):
-    """一键下载 .antrack 备份（同时落盘并写快照表）。"""
+    """一键下载 .ans 备份（同时落盘并写快照表）。"""
     if not is_admin_user(user):
         return fail("仅管理员可执行备份操作", code=403)
     try:
@@ -281,13 +302,13 @@ async def restore_backup(
     db: Session = Depends(get_db),
     user: object = Depends(get_current_user),
 ):
-    """上传 .antrack 恢复（跨版本字段自动过滤，主版本不同也允许恢复）。"""
+    """上传 .ans 恢复（跨版本字段自动过滤，主版本不同也允许恢复）。"""
     if not is_admin_user(user):
         return fail("仅管理员可执行恢复操作", code=403)
 
     raw_name = (file.filename or "").lower()
-    if not raw_name.endswith(".antrack") and not raw_name.endswith(".zip"):
-        return fail("备份文件格式不正确，请上传 .antrack 文件")
+    if not raw_name.endswith(".ans") and not raw_name.endswith(".zip"):
+        return fail("备份文件格式不正确，请上传 .ans 文件")
     content = await file.read()
     if not content:
         return fail("备份文件为空")
@@ -440,7 +461,7 @@ async def restore_from_snapshot(
 
 async def _restore_from_bytes(db: Session, *, filename: str, content: bytes):
     raw_name = filename.lower()
-    if not (raw_name.endswith(".antrack") or raw_name.endswith(".zip")):
+    if not (raw_name.endswith(".ans") or raw_name.endswith(".zip")):
         return fail("备份格式不正确")
     if not content or len(content) > 200 * 1024 * 1024:
         return fail("备份为空或过大")

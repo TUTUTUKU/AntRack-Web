@@ -12,8 +12,10 @@ from models.conflict import Conflict
 from models.backup_snapshot import BackupSnapshot
 from models.operation_log import OperationLog
 from models.global_stage import GlobalStage
+from models.auto_backup_config import AutoBackupConfig
 
 __all__ = [
     "User", "Category", "Material", "Project", "ProjectBom", "StockLog", "License",
     "UserConfig", "Conflict", "BackupSnapshot", "OperationLog", "GlobalStage",
+    "AutoBackupConfig",
 ]
