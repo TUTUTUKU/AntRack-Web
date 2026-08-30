@@ -20,6 +20,7 @@ from models.conflict import Conflict
 from models.backup_snapshot import BackupSnapshot
 from models.operation_log import OperationLog
 from models.global_stage import GlobalStage
+from models.auto_backup_config import AutoBackupConfig
 from config import DEFAULT_ADMIN_USERNAME, DEFAULT_ADMIN_PASSWORD
 from datetime import datetime, timedelta
 from sqlalchemy import inspect, text
@@ -157,6 +158,15 @@ def _ensure_default_configs(db, username: str) -> None:
     db.commit()
 
 
+def _ensure_auto_backup_config(db) -> None:
+    """确保自动备份配置行存在（id=1，全局单行）。"""
+    row = db.query(AutoBackupConfig).filter(AutoBackupConfig.id == 1).first()
+    if not row:
+        db.add(AutoBackupConfig(id=1))
+        db.commit()
+        print("[初始化] 自动备份配置已写入（默认策略：每周一 02:00）")
+
+
 def init_db():
     # 让 ORM 识别全部模型，create_all 一次建完
     from models import __all__ as _models_all  # noqa: F401
@@ -215,5 +225,8 @@ def init_db():
 
         # 4. 默认配置
         _ensure_default_configs(db, DEFAULT_ADMIN_USERNAME)
+
+        # 5. 自动备份配置
+        _ensure_auto_backup_config(db)
     finally:
         db.close()

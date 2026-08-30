@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from routers import (
     auth, category, material, project, stock_log, export, dashboard,
     app as app_router, backup, revision, conflicts, operation_logs, user_configs,
+    auto_backup,
 )
 
 api_router = APIRouter()
@@ -21,5 +22,6 @@ api_router.include_router(revision.router, prefix="/api/revision", tags=["系统
 api_router.include_router(conflicts.router, prefix="/api/conflicts", tags=["冲突处理"])
 api_router.include_router(operation_logs.router, prefix="/api/operation-logs", tags=["操作日志"])
 api_router.include_router(user_configs.router, prefix="/api/user-configs", tags=["用户配置"])
+api_router.include_router(auto_backup.router, prefix="/api/auto-backup", tags=["自动备份配置"])
 # App：激活心跳 + 握手 + 离线同步（共用 /api/app 前缀）
 api_router.include_router(app_router.router, prefix="/api/app", tags=["App 设备与同步"])

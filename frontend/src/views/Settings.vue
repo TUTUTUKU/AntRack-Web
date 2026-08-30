@@ -191,21 +191,7 @@
         <!-- 自动备份 -->
         <template v-else-if="activeL2 === 'auto-backup'">
           <h3 class="sub-title"><el-icon><Timer /></el-icon>自动备份设置</h3>
-          <div class="data-card">
-            <p class="hint">每周一白天自动备份。</p>
-            <div class="cfg-row">
-              <span>启用自动备份</span>
-              <el-switch v-model="backupAutoEnable" active-value="1" inactive-value="0" @change="saveCfg('backup_auto_enable')" />
-            </div>
-            <div class="cfg-row">
-              <span>最多保留（份）</span>
-              <el-input-number v-model="backupKeepCount" :min="1" :max="50" size="small" controls-position="right" @change="saveCfg('backup_keep_max_count', backupKeepCount)" />
-            </div>
-            <div class="cfg-row">
-              <span>最长保留（天）</span>
-              <el-input-number v-model="backupKeepDays" :min="1" :max="365" size="small" controls-position="right" @change="saveCfg('backup_keep_max_days', backupKeepDays)" />
-            </div>
-          </div>
+          <AutoBackupPanel />
         </template>
       </section>
     </div>
@@ -232,6 +218,7 @@ import * as ws from '@/utils/ws'
 const ConflictPanel = defineAsyncComponent(() => import('@/components/ConflictPanel.vue'))
 const OperationLogsPanel = defineAsyncComponent(() => import('@/components/OperationLogsPanel.vue'))
 const BackupPanel = defineAsyncComponent(() => import('@/components/BackupPanel.vue'))
+const AutoBackupPanel = defineAsyncComponent(() => import('@/components/AutoBackupPanel.vue'))
 
 const router = useRouter()
 const username = localStorage.getItem('username') || 'admin'

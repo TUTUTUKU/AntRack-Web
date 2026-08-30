@@ -80,6 +80,11 @@ export const downloadBackupSnapshot = (id) =>
 export const deleteBackupSnapshot = (id) => request.delete(`/api/backup/delete/${id}`)
 export const restoreFromSnapshot = (id) => request.post(`/api/backup/restore-from-snapshot/${id}`)
 
+// 自动备份配置
+export const getAutoBackupConfig = () => request.get('/api/auto-backup/config')
+export const updateAutoBackupConfig = (data) => request.put('/api/auto-backup/config', data)
+export const runAutoBackupNow = () => request.post('/api/auto-backup/run-now')
+
 // V1.2 版本与阶段
 export const getRevisionInfo = () => request.get('/api/revision/info')
 
