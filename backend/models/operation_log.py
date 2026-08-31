@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """操作日志表：服务端日志，保留 1 年；APP 同步后写入；Web 业务写入"""
-from sqlalchemy import Column, Integer, String, DateTime, BigInteger, Text
+from sqlalchemy import Column, Integer, String, DateTime, Text
 from datetime import datetime
 from database import Base
 
@@ -8,7 +8,7 @@ from database import Base
 class OperationLog(Base):
     __tablename__ = "operation_log"
 
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(64), default="", nullable=False, index=True)   # user 或 device 绑定人
     source = Column(String(16), default="web", nullable=False)              # web / app
     device_id = Column(String(128), default="", nullable=False)             # app 端有，web 留空
