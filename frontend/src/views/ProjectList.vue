@@ -27,6 +27,14 @@
             <div class="op-cell">
               <el-button link class="op-btn op-detail" size="small" @click="goDetail(row)">进入详情</el-button>
               <el-button link class="op-btn op-export" size="small" @click="onExportOne(row)">导出BOM</el-button>
+              <el-upload
+                :show-file-list="false"
+                :before-upload="(f) => onImportBom(row, f)"
+                accept=".xlsx,.xls"
+                class="op-import-up"
+              >
+                <el-button link class="op-btn op-import" size="small">导入BOM</el-button>
+              </el-upload>
               <el-button link class="op-btn op-edit" size="small" @click="onEdit(row)">编辑</el-button>
               <el-button link class="op-btn op-del" size="small" @click="onDelete(row)">删除</el-button>
             </div>
@@ -68,8 +76,8 @@
 import { ref, reactive, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Download, Folder } from '@element-plus/icons-vue'
-import { getProjectList, saveProject, updateProject, deleteProject, exportProject, exportProjectList } from '@/api'
+import { Plus, Download, Folder, Upload } from '@element-plus/icons-vue'
+import { getProjectList, saveProject, updateProject, deleteProject, exportProject, exportProjectList, importProjectBom } from '@/api'
 import { downloadBlob } from '@/utils/file'
 
 const router = useRouter()
@@ -158,6 +166,24 @@ async function onExportOne(row) {
     downloadBlob(res.data, res.headers['content-disposition'])
     ElMessage.success('导出成功')
   } catch (e) {}
+}
+
+async function onImportBom(row, file) {
+  // 校验
+  const ok = await ElMessageBox.confirm(
+    `确定向项目「${row.name}」导入 BOM 吗？\nExcel 需包含「物料ID」和「预估用量」列，可先点「导出BOM」获取模板。`,
+    '导入BOM确认',
+    { type: 'warning', confirmButtonText: '确认导入', cancelButtonText: '取消' }
+  ).then(() => true).catch(() => false)
+  if (!ok) return false
+  const formData = new FormData()
+  formData.append('file', file)
+  try {
+    const r = await importProjectBom(row.id, formData)
+    ElMessage.success(r.msg || '导入成功')
+    loadData()
+  } catch (e) {}
+  return false  // 阻止 el-upload 默认上传
 }
 </script>
 
