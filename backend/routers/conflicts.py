@@ -10,6 +10,7 @@ from database import get_db
 from dependencies import get_current_user, principal_username
 from core.response import success, fail
 from core.ws_manager import ws_mgr
+from core.op_log_service import write_op_log
 from models.conflict import Conflict
 from schemas.conflict import ConflictResolveIn, ConflictBatchResolveIn
 
@@ -88,6 +89,27 @@ async def resolve(
     else:
         return fail("非法 status：accepted / dismissed")
     c.update_time = datetime.now()
+    db.flush()
+    # 操作日志：冲突处理
+    action_label = "conflict_accept" if data.status == "accepted" else "conflict_dismiss"
+    try:
+        snaps = json.loads(c.snapshots_json or "[]")
+    except Exception:
+        snaps = []
+    write_op_log(
+        db, username=principal_username(user), source="web", action=action_label,
+        material_id=c.material_id,
+        detail={
+            "conflict_id": c.id,
+            "stage_code": c.stage_code,
+            "status": data.status,
+            "chosen_snapshot_index": data.chosen_snapshot_index if data.status == "accepted" else None,
+            "snapshot_count": len(snaps),
+            "summary": snaps[data.chosen_snapshot_index]["summary"]
+            if data.status == "accepted" and snaps and 0 <= (data.chosen_snapshot_index or 0) < len(snaps)
+            else "",
+        },
+    )
     db.commit()
     await ws_mgr.notify_conflict_resolved(c.id, c.material_id, c.status)
     return success(_conflict_to_dict(c), "冲突处理成功")
@@ -104,6 +126,7 @@ async def resolve_batch(
         return fail("未选择冲突")
     accepted_ids: list[int] = []
     mid_map: dict[int, int] = {}
+    processed_ids: list[int] = []
     rows = db.query(Conflict).filter(Conflict.id.in_(ids)).all()
     for c in rows:
         if c.status in ("accepted", "dismissed"):
@@ -123,23 +146,43 @@ async def resolve_batch(
             c.status = "dismissed"
         c.operator = principal_username(user)
         c.update_time = datetime.now()
+        db.flush()
+        # 操作日志：批量冲突处理（每条都记）
+        try:
+            snaps = json.loads(c.snapshots_json or "[]")
+        except Exception:
+            snaps = []
+        action_label = "conflict_accept_batch" if data.status == "accepted" else "conflict_dismiss_batch"
+        write_op_log(
+            db, username=principal_username(user), source="web", action=action_label,
+            material_id=c.material_id,
+            detail={
+                "conflict_id": c.id,
+                "stage_code": c.stage_code,
+                "status": data.status,
+                "chosen_snapshot_index": c.chosen_source_index if data.status == "accepted" else None,
+                "snapshot_count": len(snaps),
+                "batch_size": len(rows),
+            },
+        )
         if c.status == "accepted":
             accepted_ids.append(c.id)
         mid_map[c.id] = c.material_id
+        processed_ids.append(c.id)
     db.commit()
     mids = list(set(mid_map.values()))
     if accepted_ids:
         await ws_mgr.broadcast("conflict:resolved:batch", {
             "ids": accepted_ids, "material_ids": mids, "status": data.status,
         })
-    return success({"processed": len(rows), "ids": [c.id for c in rows]}, "批量处理完成")
+    return success({"processed": len(processed_ids), "ids": processed_ids}, "批量处理完成")
 
 
 @router.post("/seed-demo")
 def seed_demo(
     clear_first: bool = False,
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    user: str = Depends(get_current_user),
 ):
     """插入冲突演示测试数据（用于前端操作演示与截图）"""
     if clear_first:
@@ -299,5 +342,16 @@ def seed_demo(
 
     for row in demo_rows:
         db.add(row)
+    db.flush()
+    # 操作日志：插入冲突演示数据
+    write_op_log(
+        db, username=principal_username(user), source="web", action="conflict_seed_demo",
+        detail={
+            "inserted": len(demo_rows),
+            "clear_first": bool(clear_first),
+            "conflict_material_ids": [r.material_id for r in demo_rows],
+            "conflict_stage_codes": [r.stage_code for r in demo_rows],
+        },
+    )
     db.commit()
     return success({"inserted": len(demo_rows)}, "冲突演示数据插入完成，可刷新前端冲突处理页查看")

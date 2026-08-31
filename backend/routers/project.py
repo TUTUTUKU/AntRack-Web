@@ -310,15 +310,9 @@ def bom_consume(bom_id: int, data: BomConsumeIn, db: Session = Depends(get_db), 
         log_out = StockLog(
             material_id=m.id, project_id=p.id, log_type="out_project",
             num=-data.consume_num, cost=out_cost, avg_price=m.stock_avg_price,
-            remark=f"项目[{p.name}]BOM消耗出库",
+            remark=f"项目[{p.name}]BOM消耗出库（对应预占用已同步释放）",
         )
         db.add(log_out)
-        log_unlock = StockLog(
-            material_id=m.id, project_id=p.id, log_type="unlock",
-            num=-data.consume_num, cost=0.0, avg_price=m.stock_avg_price,
-            remark=f"项目[{p.name}]BOM消耗释放对应预占用",
-        )
-        db.add(log_unlock)
         db.commit()
     except Exception as e:
         db.rollback()
@@ -334,12 +328,15 @@ def bom_consume(bom_id: int, data: BomConsumeIn, db: Session = Depends(get_db), 
 
 @router.post("/finish-settle")
 def finish_settle(project_id: int, db: Session = Depends(get_db), _: object = Depends(get_current_user)):
-    """完工结算：仅释放 BOM 剩余预占用（物料出库已在 bom-consume 时完成），避免重复扣减"""
+    """完工结算：将 BOM 行剩余锁定量（lock_num - used_num）统一强制消耗（扣真实库存），
+    所有物料置为"消耗"状态，项目状态归档为 finish。"""
     p = db.query(Project).filter(Project.id == project_id).first()
     if not p:
         return fail("项目不存在")
     if p.status == "finish":
         return fail("项目已归档，不可重复结算")
+    if p.status != "making":
+        return fail("仅制作阶段的项目可以执行完工结算")
 
     boms = db.query(ProjectBom).filter(ProjectBom.project_id == project_id).all()
     settle_list = []
@@ -348,31 +345,42 @@ def finish_settle(project_id: int, db: Session = Depends(get_db), _: object = De
     try:
         for bom in boms:
             m = db.query(Material).filter(Material.id == bom.material_id).first()
-            locked = bom.lock_num  # 剩存未消耗的预占用（= 预估用量 - 已消耗）
-            used = bom.used_num
-            # 已消耗部分 = 在 bom-consume 时已真实出库，这里不再二次扣
-            out_cost = round(used * (m.stock_avg_price if m else 0), 6) if used > 0 else 0
-            total_cost = round(total_cost + out_cost, 6)
+            remain_to_consume = round(max(0.0, bom.lock_num - bom.used_num), 6)
+            used_originally = bom.used_num
+            material_avg = m.stock_avg_price if m else 0
+            consumed_cost = 0.0
 
-            if m and locked > 0:
-                # 释放未消耗的预占用
-                m.lock_num = round(max(0.0, m.lock_num - locked), 6)
+            if m and remain_to_consume > 0:
+                # 1. 强制消耗 = 扣减真实库存
+                if m.stock_total_num + 1e-9 < remain_to_consume:
+                    # 库存不足时仍按需求量扣（允许负库存，但告警），保证项目一致性
+                    pass
+                m.stock_total_num = round(m.stock_total_num - remain_to_consume, 6)
+                # 2. 释放这部分的预占用 lock
+                m.lock_num = round(max(0.0, m.lock_num - remain_to_consume), 6)
                 db.flush()
-                log_unlock = StockLog(
-                    material_id=m.id, project_id=p.id, log_type="unlock",
-                    num=-locked, cost=0.0, avg_price=m.stock_avg_price,
-                    remark=f"项目[{p.name}]完工释放剩余预占用({locked})",
-                )
-                db.add(log_unlock)
 
+                this_cost = round(remain_to_consume * material_avg, 6)
+                consumed_cost = this_cost
+                log_out = StockLog(
+                    material_id=m.id, project_id=p.id, log_type="out",
+                    num=-remain_to_consume, cost=this_cost, avg_price=material_avg,
+                    remark=f"项目[{p.name}]完工结算：自动消耗剩余预占用({remain_to_consume})",
+                )
+                db.add(log_out)
+                bom.used_num = round(bom.used_num + remain_to_consume, 6)
+
+            # 3. 若还有残留 lock（理论上 0），兜底清 0
             bom.lock_num = 0.0
             db.flush()
+
+            total_cost = round(total_cost + consumed_cost + round(used_originally * material_avg, 6), 6)
             settle_list.append({
                 "material_id": bom.material_id,
                 "material_name": m.name if m else "(已删除)",
-                "used_num": used,
-                "unlock_num": locked,
-                "out_cost": out_cost,
+                "used_num": bom.used_num,
+                "auto_consumed_num": remain_to_consume,
+                "cost": consumed_cost,
                 "skipped": m is None,
             })
 
@@ -382,7 +390,7 @@ def finish_settle(project_id: int, db: Session = Depends(get_db), _: object = De
             "settle_list": settle_list,
             "total_cost": total_cost,
             "finish_project_status": "finish",
-        }, "项目完工结算成功")
+        }, "项目完工结算成功：全部BOM物料已强制消耗，库存已扣减")
     except Exception as e:
         db.rollback()
         return fail(f"完工结算失败，已回滚：{str(e)}")

@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 import io
+import re
 from datetime import datetime
+from urllib.parse import quote
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -17,13 +19,26 @@ from models.project_bom import ProjectBom
 router = APIRouter()
 
 
+def _safe_filename(filename: str) -> str:
+    """生成 HTTP header 安全的文件名：去掉非法字符，中文按 RFC 5987 编码。
+    返回可直接拼到 Content-Disposition 的字符串（含 filename*=UTF-8'' 段）"""
+    # 去掉Windows文件名非法字符，并把连续空白/下划线收敛
+    cleaned = re.sub(r'[\\/:*?"<>|\r\n\t]+', '_', filename)
+    cleaned = re.sub(r'[\s_]+', '_', cleaned).strip('._ ')
+    if not cleaned:
+        cleaned = 'export'
+    # 双写：ASCII 近似文件名（兼容老浏览器） + UTF-8 编码 filename*
+    ascii_name = ''.join(c if ord(c) < 128 else '_' for c in cleaned) or 'export'
+    return f"filename=\"{ascii_name}\"; filename*=UTF-8''{quote(cleaned)}"
+
+
 def _xlsx(df, filename: str) -> StreamingResponse:
     buf = io.BytesIO()
     with __import__("pandas").ExcelWriter(buf, engine="xlsxwriter") as writer:
         df.to_excel(writer, index=False, sheet_name="Sheet1")
     buf.seek(0)
     headers = {
-        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Content-Disposition": f"attachment; {_safe_filename(filename)}",
     }
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=headers)
 
@@ -141,10 +156,11 @@ def export_project(project_id: int, db: Session = Depends(get_db), _: object = D
         info_df.to_excel(writer, index=False, sheet_name="项目信息")
         df.to_excel(writer, index=False, sheet_name="BOM清单")
     buf.seek(0)
+    bom_name = f"BOM_{p.name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="BOM_{p.name}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'},
+        headers={"Content-Disposition": f"attachment; {_safe_filename(bom_name)}"},
     )
 
 

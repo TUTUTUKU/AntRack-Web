@@ -24,7 +24,16 @@
           <el-option label="制作阶段" value="making" :disabled="project.status === 'finish'" />
           <el-option label="完工结算" value="finish" />
         </el-select>
-        <el-button type="primary" @click="onExport"><el-icon><Download /></el-icon>导出项目+BOM</el-button>
+        <div class="grow"></div>
+        <el-upload
+          :show-file-list="false"
+          :before-upload="(f) => onImportBom(f)"
+          accept=".xlsx,.xls"
+        >
+          <el-button v-if="project && project.status !== 'finish'" size="small"><el-icon><Upload /></el-icon>导入BOM</el-button>
+        </el-upload>
+        <el-button size="small" @click="onExportBom"><el-icon><Download /></el-icon>导出BOM</el-button>
+        <el-button v-if="project && project.status !== 'finish'" type="primary" size="small" @click="onAddBom"><el-icon><Plus /></el-icon>新增BOM</el-button>
       </div>
     </div>
 
@@ -32,35 +41,28 @@
     <div class="page-card">
       <div class="page-title">
         <el-icon><List /></el-icon>BOM清单
-        <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-          <el-upload
-            :show-file-list="false"
-            :before-upload="(f) => onImportBom(f)"
-            accept=".xlsx,.xls"
-          >
-            <el-button v-if="project && project.status !== 'finish'" size="small"><el-icon><Upload /></el-icon>导入BOM</el-button>
-          </el-upload>
-          <el-button size="small" @click="onExportBom"><el-icon><Download /></el-icon>导出BOM</el-button>
-          <el-button v-if="project && project.status !== 'finish'" type="primary" size="small" @click="onAddBom"><el-icon><Plus /></el-icon>新增BOM</el-button>
-        </div>
       </div>
       <el-table :data="bomList" border stripe size="default" empty-text="暂无BOM明细">
-        <el-table-column label="物料名称" min-width="140" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.material_name }}</template>
-        </el-table-column>
-        <el-table-column label="规格" min-width="140" show-overflow-tooltip>
+        <el-table-column label="物料名称" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
-            <span>{{ row.material_spec || '-' }}</span>
-            <div class="sub">{{ row.parent_category_name }} / {{ row.category_name }}</div>
+            <div class="mat-cell">
+              <el-image v-if="row.material_image" :src="row.material_image" fit="cover" class="mat-img" />
+              <div class="mat-info">
+                <strong>{{ row.material_name }}</strong>
+              </div>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column label="预估用量" width="120">
+        <el-table-column label="规格 / 分类" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-input-number v-if="project && project.status !== 'finish'" v-model="row.plan_num" :min="0" :precision="0" :step="1" size="small" controls-position="right" style="width:100%" @change="v => onPlanChange(row, v)" />
-            <span v-else>{{ fmtNum(row.plan_num) }}</span>
+            <div>{{ row.material_spec || '—' }}</div>
+            <div class="sub">{{ row.parent_category_name }}{{ row.parent_category_name?' / ':'' }}{{ row.category_name }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="状态" min-width="180">
+        <el-table-column label="预估用量" width="110" align="center">
+          <template #default="{ row }"><strong>{{ fmtNum(row.plan_num) }}</strong></template>
+        </el-table-column>
+        <el-table-column label="状态" min-width="300">
           <template #default="{ row }">
             <div class="status-cell">
               <el-tag size="small" type="info" effect="plain">预占 {{ fmtNum(row.lock_num) }}</el-tag>
@@ -69,7 +71,7 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="240" fixed="right" class-name="op-col">
+        <el-table-column label="操作" width="220" fixed="right" class-name="op-col" align="center">
           <template #default="{ row }">
             <div class="op-cell">
               <el-button link class="op-btn op-edit" size="small" @click="onEditBom(row)" :disabled="isFinished">编辑</el-button>
@@ -124,25 +126,7 @@
       </template>
     </el-dialog>
 
-    <!-- 消耗确认弹窗 -->
-    <el-dialog v-model="consumeDialogVisible" title="确认物料消耗" width="420px">
-      <div class="mat-info" v-if="consumeRow">
-        <strong>{{ consumeRow.material_name }}</strong>
-        <span class="sub">锁定 {{ fmtNum(consumeRow.lock_num) }} · 已消耗 {{ fmtNum(consumeRow.used_num) }} · 可消耗 {{ fmtNum(consumeRemain) }}</span>
-      </div>
-      <el-form label-width="100px" style="margin-top:14px">
-        <el-form-item label="本次消耗数量">
-          <el-input-number v-model="consumeNum" :min="1" :max="consumeRemain" :precision="0" :step="1" controls-position="right" style="width:100%" />
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input v-model="consumeRemark" type="textarea" :rows="2" maxlength="500" show-word-limit placeholder="选填" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="consumeDialogVisible = false">取消</el-button>
-        <el-button type="success" :loading="consumeSaving" @click="onSubmitConsume">确认消耗</el-button>
-      </template>
-    </el-dialog>
+    <!-- 消耗确认弹窗已移除：点击消耗直接二次确认→一次性消耗全部剩余预占用 -->
   </div>
 </template>
 
@@ -181,16 +165,8 @@ const bomRules = {
   plan_num: [{ required: true, message: '请输入预估用量', trigger: 'blur' }]
 }
 
-// 消耗
-const consumeDialogVisible = ref(false)
-const consumeRow = ref(null)
-const consumeNum = ref(0)
-const consumeRemark = ref('')
+// 消耗：直接一次性扣减"剩余预占用 = 锁定 - 已用"全部数量
 const consumeSaving = ref(false)
-const consumeRemain = computed(() => {
-  if (!consumeRow.value) return 0
-  return +(consumeRow.value.lock_num - consumeRow.value.used_num).toFixed(6)
-})
 
 function statusText(s) { return { prepare: '准备阶段', making: '制作阶段', finish: '已归档' }[s] || s }
 function statusTagType(s) { return { prepare: 'info', making: 'warning', finish: 'success' }[s] || '' }
@@ -227,17 +203,15 @@ function onStatusChange(val) {
 
 function onFinishSettle() {
   ElMessageBox.confirm(
-    '确定执行完工结算吗？',
+    '确定执行完工结算吗？\n结算后将把所有BOM行剩余预占用强制消耗（扣减真实库存），项目状态归档，不可撤销。',
     '完工结算确认', { type: 'warning', confirmButtonText: '确认结算' }
   ).then(async () => {
     const res = await finishSettle(project.value.id)
     const d = res.data
     let msg = `项目完工结算成功，总消耗成本 ${fmtPrice(d.total_cost)} 元`
     if (d.settle_list && d.settle_list.length) {
-      const out = d.settle_list.filter(s => s.used_num > 0).map(s => `${s.material_name}:出库${fmtNum(s.used_num)}`).join('；')
-      const unlock = d.settle_list.filter(s => s.unlock_num > 0).map(s => `${s.material_name}:解锁${fmtNum(s.unlock_num)}`).join('；')
-      if (out) msg += `\n出库：${out}`
-      if (unlock) msg += `\n解锁：${unlock}`
+      const out = d.settle_list.map(s => `${s.material_name}:消耗${fmtNum(s.used_num)}${s.auto_consumed_num > 0 ? `(含自动${fmtNum(s.auto_consumed_num)})` : ''}`).join('；')
+      if (out) msg += `\n物料明细：${out}`
     }
     ElMessageBox.alert(msg, '结算结果', { type: 'success' })
     loadData()
@@ -279,13 +253,6 @@ function onSaveBom() {
   })
 }
 
-async function onPlanChange(row, v) {
-  try {
-    await updateBomPlan(row.id, { plan_num: v })
-    ElMessage.success('预估用量已更新')
-  } catch (e) { loadData() }
-}
-
 function onDeleteBom(row) {
   ElMessageBox.confirm(`确定移除BOM明细「${row.material_name}」吗？`, '删除确认', { type: 'warning' }).then(async () => {
     await deleteBom(row.id)
@@ -295,33 +262,26 @@ function onDeleteBom(row) {
 }
 
 function onConsume(row) {
-  consumeRow.value = row
-  consumeNum.value = consumeRemain.value > 0 ? 1 : 0
-  consumeRemark.value = ''
-  consumeDialogVisible.value = true
+  const remain = +(row.lock_num - row.used_num).toFixed(6)
+  if (remain <= 0) { ElMessage.warning('没有可消耗的数量'); return }
+  const stock = +(row.stock_total_num ?? 0).toFixed(6)
+  if (stock < remain) {
+    ElMessage.warning(`库存不足，取消消耗：需要 ${fmtNum(remain)}，当前实际库存仅 ${fmtNum(stock)}`)
+    return
+  }
+  ElMessageBox.confirm(
+    `确定消耗物料「${row.material_name}」吗？\n\n将一次性消耗全部剩余预占用：${fmtNum(remain)} 个（预估用量 ${fmtNum(row.plan_num)}，已消耗 ${fmtNum(row.used_num)}，实际库存 ${fmtNum(stock)}）`,
+    '确认消耗', { type: 'warning', confirmButtonText: '确认消耗' }
+  ).then(async () => {
+    consumeSaving.value = true
+    try {
+      await bomConsume(row.id, { consume_num: remain })
+      ElMessage.success(`消耗成功：${fmtNum(remain)} 个`)
+      loadData()
+    } catch (e) {} finally { consumeSaving.value = false }
+  }).catch(() => {})
 }
 
-async function onSubmitConsume() {
-  if (consumeNum.value <= 0) { ElMessage.warning('消耗数量必须大于0'); return }
-  if (consumeNum.value > consumeRemain.value) { ElMessage.warning(`消耗数量不能超过可消耗量 ${fmtNum(consumeRemain.value)}`); return }
-  consumeSaving.value = true
-  try {
-    await bomConsume(consumeRow.value.id, { consume_num: consumeNum.value, remark: consumeRemark.value })
-    ElMessage.success('消耗确认成功')
-    consumeDialogVisible.value = false
-    loadData()
-  } catch (e) {} finally { consumeSaving.value = false }
-}
-
-async function onExport() {
-  try {
-    const res = await exportProject(project.value.id)
-    downloadBlob(res.data, res.headers['content-disposition'])
-    ElMessage.success('导出成功')
-  } catch (e) {}
-}
-
-// BOM导入导出（仅BOM表，非项目整体）
 async function onExportBom() {
   try {
     const res = await exportProject(project.value.id)
@@ -356,21 +316,27 @@ onMounted(loadData)
 .info-row .lbl { color: var(--text-sub); }
 .action-bar { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .action-bar .lbl { color: var(--text-sub); }
+.grow { flex: 1 1 auto; }
 .sub { color: var(--text-sub); font-size: 12px; }
-.mat-info { padding: 10px 14px; background: var(--card-2); border-radius: 8px; }
-.mat-info .sub { display: block; margin-top: 4px; }
+.mat-cell { display: flex; align-items: center; gap: 10px; }
+.mat-img {
+  width: 42px; height: 42px; border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card-2);
+  flex-shrink: 0;
+}
 
 .status-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 
-/* 操作栏按钮样式 */
+/* 操作列按钮居中（之前是 justify-flex-end → 改 center，配合列 align=center） */
 .op-cell {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 4px;
   flex-wrap: nowrap;
 }
-.op-btn { padding: 2px 8px !important; }
+.op-btn { padding: 2px 8px !important; min-width: 48px; }
 .op-edit {
   background: color-mix(in srgb, var(--primary) 18%, transparent) !important;
   border-color: color-mix(in srgb, var(--primary) 28%, transparent) !important;
