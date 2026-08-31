@@ -9,12 +9,6 @@
       <el-button type="primary" plain size="small" @click="loadData">
         <el-icon><Refresh /></el-icon>刷新
       </el-button>
-      <el-button size="small" @click="onSeedDemo(false)">
-        <el-icon><MagicStick /></el-icon>生成演示数据
-      </el-button>
-      <el-button size="small" type="warning" plain @click="onSeedDemo(true)">
-        清空并重建演示
-      </el-button>
       <div class="grow"></div>
       <el-button size="small" :disabled="!selectedPending.length" @click="applyBatch('accepted')">
         批量按最新侧生效（{{ selectedPending.length }}）
@@ -121,8 +115,8 @@
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, MagicStick } from '@element-plus/icons-vue'
-import { listConflicts, resolveConflict, resolveConflictsBatch, getAllUserConfigs, seedConflictDemo } from '@/api'
+import { Refresh } from '@element-plus/icons-vue'
+import { listConflicts, resolveConflict, resolveConflictsBatch, getAllUserConfigs } from '@/api'
 import * as ws from '@/utils/ws'
 
 const emit = defineEmits(['count-updated'])
@@ -137,7 +131,6 @@ const pendingCount = ref(0)
 const expanded = reactive({})
 const selectedSet = reactive(new Set())
 const prefer = ref('latest_side')
-const seeding = ref(false)
 
 const selectedPending = computed(() => [...selectedSet])
 
@@ -194,24 +187,6 @@ async function loadData() {
       if (c.status === 'pending' && expanded[c.id] === undefined) expanded[c.id] = true
     })
   } finally { loading.value = false }
-}
-
-async function onSeedDemo(clearFirst) {
-  const msg = clearFirst
-    ? '确定先清空所有冲突记录，再重建演示数据吗？'
-    : '确定追加插入一批冲突演示数据吗？（3条待处理 + 1条已生效 + 1条已放弃）'
-  try {
-    await ElMessageBox.confirm(msg, '演示数据', { type: clearFirst ? 'warning' : 'info' })
-  } catch (e) { return }
-  seeding.value = true
-  try {
-    const r = await seedConflictDemo(clearFirst)
-    ElMessage.success(r.msg || '演示数据插入成功')
-    selectedSet.clear()
-    page.value = 1
-    status.value = 'pending'
-    loadData()
-  } catch (e) {} finally { seeding.value = false }
 }
 
 async function resolveOne(id, action, idx = null) {
