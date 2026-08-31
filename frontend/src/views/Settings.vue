@@ -185,7 +185,6 @@
               <el-icon><Refresh /></el-icon> 刷新
             </el-button>
           </div>
-          <p class="rev-footer">Developed by TUTUTUKU</p>
         </template>
 
         <!-- 自动备份 -->
