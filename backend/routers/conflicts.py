@@ -2,7 +2,7 @@
 """冲突处理接口"""
 from __future__ import annotations
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -133,3 +133,171 @@ async def resolve_batch(
             "ids": accepted_ids, "material_ids": mids, "status": data.status,
         })
     return success({"processed": len(rows), "ids": [c.id for c in rows]}, "批量处理完成")
+
+
+@router.post("/seed-demo")
+def seed_demo(
+    clear_first: bool = False,
+    db: Session = Depends(get_db),
+    _: object = Depends(get_current_user),
+):
+    """插入冲突演示测试数据（用于前端操作演示与截图）"""
+    if clear_first:
+        db.query(Conflict).delete()
+        db.commit()
+
+    now = datetime.now()
+
+    def _ts(offset_min: int) -> str:
+        return (now - timedelta(minutes=offset_min)).strftime("%Y-%m-%d %H:%M:%S")
+
+    demo_rows = [
+        # 1. 入库 vs 入库 冲突：APP +30 vs Web -15（场景：双方同时入库/出库同一物料）
+        Conflict(
+            material_id=1,
+            stage_code=1001,
+            snapshots_json=json.dumps([
+                {
+                    "source": "app",
+                    "device": "HUAWEI-P60-0xA1",
+                    "op_type": "stock_in",
+                    "fixed_ts": _ts(12),
+                    "local_device_ts": _ts(14),
+                    "time_correction_flag": "ok",
+                    "diff_fields": {"stock_total_num": 30, "stock_avg_price": 12.5},
+                    "summary": "APP入库：M3x10 螺丝 30 颗，加权均价 12.5 元/颗（库存：原 20 → 50）",
+                },
+                {
+                    "source": "web",
+                    "device": "chrome-win11-pc01",
+                    "op_type": "stock_out_temp",
+                    "fixed_ts": _ts(10),
+                    "local_device_ts": _ts(10),
+                    "time_correction_flag": "ok",
+                    "diff_fields": {"stock_total_num": -15},
+                    "summary": "Web临时出库：M3x10 螺丝 15 颗（临时借出，未归还）（库存：原 20 → 5）",
+                },
+            ], ensure_ascii=False),
+            status="pending",
+            create_time=now - timedelta(minutes=8),
+            update_time=now - timedelta(minutes=8),
+        ),
+        # 2. 物料编辑冲突：APP改规格 vs Web改备注
+        Conflict(
+            material_id=2,
+            stage_code=1002,
+            snapshots_json=json.dumps([
+                {
+                    "source": "app",
+                    "device": "XIAOMI-13Pro-0xB2",
+                    "op_type": "material_update",
+                    "fixed_ts": _ts(38),
+                    "local_device_ts": _ts(42),
+                    "time_correction_flag": "forced",
+                    "diff_fields": {"spec": "Φ8x30mm 镀锌", "warn_num": 20},
+                    "summary": "APP编辑：外六角螺栓 规格改为『Φ8x30mm 镀锌』，告警阈值改为 20",
+                },
+                {
+                    "source": "web",
+                    "device": "edge-win10-pc02",
+                    "op_type": "material_update",
+                    "fixed_ts": _ts(35),
+                    "local_device_ts": _ts(35),
+                    "time_correction_flag": "ok",
+                    "diff_fields": {"remark": "采购自五金商城A店，批次B20250812"},
+                    "summary": "Web编辑：外六角螺栓 备注补充『采购自五金商城A店，批次B20250812』",
+                },
+            ], ensure_ascii=False),
+            status="pending",
+            create_time=now - timedelta(minutes=30),
+            update_time=now - timedelta(minutes=30),
+        ),
+        # 3. BOM 锁定冲突：APP锁定 vs Web消耗
+        Conflict(
+            material_id=3,
+            stage_code=1003,
+            snapshots_json=json.dumps([
+                {
+                    "source": "app",
+                    "device": "HUAWEI-P60-0xA1",
+                    "op_type": "bom_lock",
+                    "fixed_ts": _ts(65),
+                    "local_device_ts": _ts(70),
+                    "time_correction_flag": "forced",
+                    "diff_fields": {"lock_num": 50, "project_id": 7, "project_name": "机器人底座装配"},
+                    "summary": "APP BOM锁定：5mm 亚克力板 锁定 50 块（项目『机器人底座装配』）",
+                },
+                {
+                    "source": "web",
+                    "device": "chrome-win11-pc01",
+                    "op_type": "stock_out_project",
+                    "fixed_ts": _ts(60),
+                    "local_device_ts": _ts(60),
+                    "time_correction_flag": "ok",
+                    "diff_fields": {"stock_total_num": -20, "project_id": 7},
+                    "summary": "Web项目出库：5mm 亚克力板 出库 20 块（项目『机器人底座装配』）",
+                },
+            ], ensure_ascii=False),
+            status="pending",
+            create_time=now - timedelta(hours=1),
+            update_time=now - timedelta(hours=1),
+        ),
+        # 4. 已处理（已生效）示例：优先Web
+        Conflict(
+            material_id=4,
+            stage_code=1000,
+            snapshots_json=json.dumps([
+                {
+                    "source": "app",
+                    "device": "OPPO-FindX7-0xC3",
+                    "op_type": "stock_in",
+                    "fixed_ts": _ts(180),
+                    "local_device_ts": _ts(190),
+                    "time_correction_flag": "ok",
+                    "diff_fields": {"stock_total_num": 10},
+                    "summary": "APP入库：铜柱 M2x20 10 颗",
+                },
+                {
+                    "source": "web",
+                    "device": "chrome-win11-pc01",
+                    "op_type": "stock_in",
+                    "fixed_ts": _ts(175),
+                    "local_device_ts": _ts(175),
+                    "time_correction_flag": "ok",
+                    "diff_fields": {"stock_total_num": 100, "stock_avg_price": 0.8},
+                    "summary": "Web入库：铜柱 M2x20 100 颗，均价 0.8 元/颗",
+                },
+            ], ensure_ascii=False),
+            status="accepted",
+            chosen_source_index=1,
+            operator="admin",
+            create_time=now - timedelta(hours=3),
+            update_time=now - timedelta(hours=2),
+        ),
+        # 5. 已放弃示例
+        Conflict(
+            material_id=5,
+            stage_code=998,
+            snapshots_json=json.dumps([
+                {
+                    "source": "app",
+                    "device": "VIVO-X100-0xD4",
+                    "op_type": "material_create",
+                    "fixed_ts": _ts(300),
+                    "local_device_ts": _ts(320),
+                    "time_correction_flag": "forced",
+                    "diff_fields": {"name": "测试草稿物料-勿用", "spec": "草稿"},
+                    "summary": "APP创建物料：草稿（测试）",
+                },
+            ], ensure_ascii=False),
+            status="dismissed",
+            operator="admin",
+            create_time=now - timedelta(hours=5),
+            update_time=now - timedelta(hours=4, minutes=50),
+        ),
+    ]
+
+    for row in demo_rows:
+        db.add(row)
+    db.commit()
+    return success({"inserted": len(demo_rows)}, "冲突演示数据插入完成，可刷新前端冲突处理页查看")

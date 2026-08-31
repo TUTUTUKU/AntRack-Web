@@ -32,39 +32,50 @@
     <div class="page-card">
       <div class="page-title">
         <el-icon><List /></el-icon>BOM清单
-        <el-button v-if="project && project.status !== 'finish'" type="primary" size="small" @click="onAddBom" style="margin-left:auto"><el-icon><Plus /></el-icon>新增BOM</el-button>
+        <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+          <el-upload
+            :show-file-list="false"
+            :before-upload="(f) => onImportBom(f)"
+            accept=".xlsx,.xls"
+          >
+            <el-button v-if="project && project.status !== 'finish'" size="small"><el-icon><Upload /></el-icon>导入BOM</el-button>
+          </el-upload>
+          <el-button size="small" @click="onExportBom"><el-icon><Download /></el-icon>导出BOM</el-button>
+          <el-button v-if="project && project.status !== 'finish'" type="primary" size="small" @click="onAddBom"><el-icon><Plus /></el-icon>新增BOM</el-button>
+        </div>
       </div>
       <el-table :data="bomList" border stripe size="default" empty-text="暂无BOM明细">
-        <el-table-column label="物料" min-width="160" show-overflow-tooltip>
+        <el-table-column label="物料名称" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.material_name }}</template>
+        </el-table-column>
+        <el-table-column label="规格" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
-            <div>{{ row.material_name }}</div>
-            <div class="sub">{{ row.parent_category_name }} / {{ row.category_name }} · {{ row.material_spec }}</div>
+            <span>{{ row.material_spec || '-' }}</span>
+            <div class="sub">{{ row.parent_category_name }} / {{ row.category_name }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="预估用量" width="110">
+        <el-table-column label="预估用量" width="120">
           <template #default="{ row }">
             <el-input-number v-if="project && project.status !== 'finish'" v-model="row.plan_num" :min="0" :precision="0" :step="1" size="small" controls-position="right" style="width:100%" @change="v => onPlanChange(row, v)" />
             <span v-else>{{ fmtNum(row.plan_num) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="锁定数量" width="100">
-          <template #default="{ row }"><span class="readonly-field">{{ fmtNum(row.lock_num) }}</span></template>
-        </el-table-column>
-        <el-table-column label="已消耗" width="90">
-          <template #default="{ row }"><span class="readonly-field">{{ fmtNum(row.used_num) }}</span></template>
-        </el-table-column>
-        <el-table-column label="可用库存" width="100">
-          <template #default="{ row }"><span class="readonly-field">{{ fmtNum(row.usable_stock) }}</span></template>
-        </el-table-column>
-        <el-table-column label="加权单价" width="100">
-          <template #default="{ row }"><span class="readonly-field">{{ fmtPrice(row.stock_avg_price) }}</span></template>
-        </el-table-column>
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column label="状态" min-width="180">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="onLock(row, true)" :disabled="isFinished || row.usable_stock <= 0">锁定</el-button>
-            <el-button link type="warning" size="small" @click="onLock(row, false)" :disabled="isFinished || row.lock_num <= 0">解锁</el-button>
-            <el-button link type="success" size="small" @click="onConsume(row)" :disabled="project?.status !== 'making' || row.lock_num <= row.used_num">消耗</el-button>
-            <el-button link type="danger" size="small" @click="onDeleteBom(row)" :disabled="isFinished">删除</el-button>
+            <div class="status-cell">
+              <el-tag size="small" type="info" effect="plain">预占 {{ fmtNum(row.lock_num) }}</el-tag>
+              <el-tag size="small" type="primary" effect="plain">已用 {{ fmtNum(row.used_num) }}</el-tag>
+              <el-tag size="small" type="success" effect="plain">可用 {{ fmtNum(row.usable_stock) }}</el-tag>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="240" fixed="right" class-name="op-col">
+          <template #default="{ row }">
+            <div class="op-cell">
+              <el-button link class="op-btn op-edit" size="small" @click="onEditBom(row)" :disabled="isFinished">编辑</el-button>
+              <el-button link class="op-btn op-consume" size="small" @click="onConsume(row)" :disabled="project?.status !== 'making' || row.lock_num <= row.used_num">消耗</el-button>
+              <el-button link class="op-btn op-del" size="small" @click="onDeleteBom(row)" :disabled="isFinished">删除</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -95,11 +106,11 @@
       </el-tabs>
     </div>
 
-    <!-- 新增BOM弹窗 -->
-    <el-dialog v-model="bomDialogVisible" title="新增BOM明细" width="460px">
+    <!-- 新增/编辑BOM弹窗 -->
+    <el-dialog v-model="bomDialogVisible" :title="bomEditMode ? '编辑BOM明细' : '新增BOM明细'" width="460px">
       <el-form ref="bomFormRef" :model="bomForm" :rules="bomRules" label-width="90px">
         <el-form-item label="选择物料" prop="material_id">
-          <el-select v-model="bomForm.material_id" filterable placeholder="搜索选择物料" style="width:100%">
+          <el-select v-model="bomForm.material_id" filterable placeholder="搜索选择物料" style="width:100%" :disabled="bomEditMode">
             <el-option v-for="m in materialOptions" :key="m.id" :label="`${m.name}（可用${fmtNum(m.usable_stock)}）`" :value="m.id" />
           </el-select>
         </el-form-item>
@@ -109,27 +120,7 @@
       </el-form>
       <template #footer>
         <el-button @click="bomDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="bomSaving" @click="onSaveBom">添加</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 锁定/解锁弹窗 -->
-    <el-dialog v-model="lockDialogVisible" :title="lockIsLock ? '锁定物料' : '解锁物料'" width="420px">
-      <div class="mat-info" v-if="lockRow">
-        <strong>{{ lockRow.material_name }}</strong>
-        <span class="sub">当前BOM锁定 {{ fmtNum(lockRow.lock_num) }} · 可用库存 {{ fmtNum(lockRow.usable_stock) }}</span>
-      </div>
-      <el-form label-width="100px" style="margin-top:14px">
-        <el-form-item :label="lockIsLock ? '锁定数量' : '解锁数量'">
-          <el-input-number v-model="lockNum" :min="1" :precision="0" :step="1" controls-position="right" style="width:100%" />
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input v-model="lockRemark" type="textarea" :rows="2" maxlength="500" show-word-limit placeholder="选填" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="lockDialogVisible = false">取消</el-button>
-        <el-button :type="lockIsLock ? 'primary' : 'warning'" :loading="lockSaving" @click="onSubmitLock">确认</el-button>
+        <el-button type="primary" :loading="bomSaving" @click="onSaveBom">{{ bomEditMode ? '保存' : '添加' }}</el-button>
       </template>
     </el-dialog>
 
@@ -159,11 +150,11 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Download, Folder, List, Back } from '@element-plus/icons-vue'
+import { Plus, Download, Folder, List, Back, Upload } from '@element-plus/icons-vue'
 import {
   getProjectDetail, switchProjectStatus, finishSettle,
-  getAllMaterials, saveBom, updateBomPlan, deleteBom, bomLock, bomConsume,
-  getStockLogList, exportProject
+  getAllMaterials, saveBom, updateBomPlan, deleteBom, bomConsume,
+  getStockLogList, exportProject, importProjectBom
 } from '@/api'
 import { downloadBlob } from '@/utils/file'
 import { fmtNum, fmtPrice } from '@/utils/format'
@@ -178,8 +169,10 @@ const materialOptions = ref([])
 
 const isFinished = computed(() => project.value?.status === 'finish')
 
-// 新增BOM
+// 新增/编辑BOM
 const bomDialogVisible = ref(false)
+const bomEditMode = ref(false)  // false=新增, true=编辑
+const bomEditRowId = ref(null)
 const bomSaving = ref(false)
 const bomFormRef = ref()
 const bomForm = reactive({ material_id: null, plan_num: 0 })
@@ -187,14 +180,6 @@ const bomRules = {
   material_id: [{ required: true, message: '请选择物料', trigger: 'change' }],
   plan_num: [{ required: true, message: '请输入预估用量', trigger: 'blur' }]
 }
-
-// 锁定/解锁
-const lockDialogVisible = ref(false)
-const lockRow = ref(null)
-const lockIsLock = ref(true)
-const lockNum = ref(0)
-const lockRemark = ref('')
-const lockSaving = ref(false)
 
 // 消耗
 const consumeDialogVisible = ref(false)
@@ -261,7 +246,17 @@ function onFinishSettle() {
 
 function onAddBom() {
   loadMaterials()
+  bomEditMode.value = false
+  bomEditRowId.value = null
   Object.assign(bomForm, { material_id: null, plan_num: 0 })
+  bomDialogVisible.value = true
+}
+
+function onEditBom(row) {
+  loadMaterials()
+  bomEditMode.value = true
+  bomEditRowId.value = row.id
+  Object.assign(bomForm, { material_id: row.material_id, plan_num: row.plan_num })
   bomDialogVisible.value = true
 }
 
@@ -270,8 +265,14 @@ function onSaveBom() {
     if (!valid) return
     bomSaving.value = true
     try {
-      await saveBom({ project_id: project.value.id, material_id: bomForm.material_id, plan_num: bomForm.plan_num })
-      ElMessage.success('BOM明细新增成功')
+      if (bomEditMode.value) {
+        // 编辑模式：更新预估用量（会同步更新lock_num）
+        await updateBomPlan(bomEditRowId.value, { plan_num: bomForm.plan_num })
+        ElMessage.success('BOM明细编辑成功')
+      } else {
+        await saveBom({ project_id: project.value.id, material_id: bomForm.material_id, plan_num: bomForm.plan_num })
+        ElMessage.success('BOM明细新增成功')
+      }
       bomDialogVisible.value = false
       loadData()
     } catch (e) {} finally { bomSaving.value = false }
@@ -291,26 +292,6 @@ function onDeleteBom(row) {
     ElMessage.success('BOM明细删除成功')
     loadData()
   }).catch(() => {})
-}
-
-function onLock(row, isLock) {
-  lockRow.value = row
-  lockIsLock.value = isLock
-  lockNum.value = isLock ? (row.usable_stock > 0 ? 1 : 0) : (row.lock_num > 0 ? 1 : 0)
-  lockRemark.value = ''
-  lockDialogVisible.value = true
-}
-
-async function onSubmitLock() {
-  if (lockNum.value <= 0) { ElMessage.warning('数量必须大于0'); return }
-  lockSaving.value = true
-  try {
-    const num = lockIsLock.value ? lockNum.value : -lockNum.value
-    await bomLock({ project_id: project.value.id, material_id: lockRow.value.material_id, lock_num: num, remark: lockRemark.value })
-    ElMessage.success(lockIsLock.value ? '锁定成功' : '解锁成功')
-    lockDialogVisible.value = false
-    loadData()
-  } catch (e) {} finally { lockSaving.value = false }
 }
 
 function onConsume(row) {
@@ -340,6 +321,32 @@ async function onExport() {
   } catch (e) {}
 }
 
+// BOM导入导出（仅BOM表，非项目整体）
+async function onExportBom() {
+  try {
+    const res = await exportProject(project.value.id)
+    downloadBlob(res.data, res.headers['content-disposition'])
+    ElMessage.success('BOM导出成功')
+  } catch (e) {}
+}
+
+async function onImportBom(file) {
+  const ok = await ElMessageBox.confirm(
+    `确定向项目「${project.value.name}」导入 BOM 吗？\nExcel 需包含「物料ID」和「预估用量」列，可先点「导出BOM」获取模板。`,
+    '导入BOM确认',
+    { type: 'warning', confirmButtonText: '确认导入', cancelButtonText: '取消' }
+  ).then(() => true).catch(() => false)
+  if (!ok) return false
+  const formData = new FormData()
+  formData.append('file', file)
+  try {
+    const r = await importProjectBom(project.value.id, formData)
+    ElMessage.success(r.msg || '导入成功')
+    loadData()
+  } catch (e) {}
+  return false
+}
+
 onMounted(loadData)
 </script>
 
@@ -352,4 +359,39 @@ onMounted(loadData)
 .sub { color: var(--text-sub); font-size: 12px; }
 .mat-info { padding: 10px 14px; background: var(--card-2); border-radius: 8px; }
 .mat-info .sub { display: block; margin-top: 4px; }
+
+.status-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+/* 操作栏按钮样式 */
+.op-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+.op-btn { padding: 2px 8px !important; }
+.op-edit {
+  background: color-mix(in srgb, var(--primary) 18%, transparent) !important;
+  border-color: color-mix(in srgb, var(--primary) 28%, transparent) !important;
+  color: var(--primary) !important;
+}
+.op-consume {
+  background: color-mix(in srgb, var(--success) 18%, transparent) !important;
+  border-color: color-mix(in srgb, var(--success) 28%, transparent) !important;
+  color: var(--success) !important;
+}
+.op-del {
+  background: color-mix(in srgb, var(--danger) 18%, transparent) !important;
+  border-color: color-mix(in srgb, var(--danger) 28%, transparent) !important;
+  color: var(--danger) !important;
+}
+
+/* 操作列（fixed=right）不透明底色，防止滚动透字 */
+:deep(.el-table .op-col),
+:deep(.el-table__row:hover .op-col),
+:deep(.el-table__row.el-table__row--striped .op-col),
+:deep(.el-table__row.el-table__row--striped:hover .op-col) {
+  background: var(--card, #242830) !important;
+}
 </style>

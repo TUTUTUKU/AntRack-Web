@@ -96,6 +96,8 @@ export const getRevisionInfo = () => request.get('/api/revision/info')
 export const listConflicts = (params) => request.get('/api/conflicts/list', { params })
 export const resolveConflict = (id, data) => request.post(`/api/conflicts/resolve/${id}`, data)
 export const resolveConflictsBatch = (data) => request.post('/api/conflicts/resolve-batch', data)
+export const seedConflictDemo = (clearFirst = false) =>
+  request.post('/api/conflicts/seed-demo', null, { params: { clear_first: clearFirst } })
 
 // V1.2 操作日志
 export const listOperationLogs = (params) => request.get('/api/operation-logs/list', { params })
