@@ -106,12 +106,15 @@ def export_stock_log(
 
 @router.get("/project/{project_id}")
 def export_project(project_id: int, db: Session = Depends(get_db), _: object = Depends(get_current_user)):
+    """导出项目BOM表：有明细导明细，无明细导空模板（仅表头，方便手动填写后导入）"""
     import pandas as pd
     p = db.query(Project).filter(Project.id == project_id).first()
     if not p:
         return fail("项目不存在")
     boms = db.query(ProjectBom).filter(ProjectBom.project_id == project_id).order_by(ProjectBom.id.asc()).all()
     status_map = {"prepare": "准备阶段", "making": "制作阶段", "finish": "已归档"}
+    # 固定列顺序：即使 BOM 为空也能导出带表头的模板
+    columns = ["物料ID", "物料名称", "分类", "规格", "预估用量", "锁定数量", "已消耗数量", "物料加权单价", "已消耗成本"]
     rows = []
     for b in boms:
         m = db.query(Material).filter(Material.id == b.material_id).first()
@@ -127,11 +130,9 @@ def export_project(project_id: int, db: Session = Depends(get_db), _: object = D
             "物料加权单价": m.stock_avg_price if m else 0,
             "已消耗成本": round(b.used_num * (m.stock_avg_price if m else 0), 6),
         })
-    df = pd.DataFrame(rows)
-    # 在表头插入项目信息
+    df = pd.DataFrame(rows, columns=columns)
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
-        # 项目信息 sheet
         info_df = pd.DataFrame([
             {"项目名称": p.name, "状态": status_map.get(p.status, p.status),
              "简介": p.intro, "资料链接": p.link,
@@ -143,7 +144,7 @@ def export_project(project_id: int, db: Session = Depends(get_db), _: object = D
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="项目_{p.name}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'},
+        headers={"Content-Disposition": f'attachment; filename="BOM_{p.name}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'},
     )
 
 

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -375,3 +375,76 @@ def finish_settle(project_id: int, db: Session = Depends(get_db), _: object = De
     except Exception as e:
         db.rollback()
         return fail(f"完工结算失败，已回滚：{str(e)}")
+
+
+@router.post("/bom/import/{project_id}")
+async def import_bom(project_id: int, file: UploadFile = File(...), db: Session = Depends(get_db), _: object = Depends(get_current_user)):
+    """导入BOM表（Excel）：解析物料ID+预估用量，批量新增。已存在的物料跳过。"""
+    import io
+    import pandas as pd
+    p = db.query(Project).filter(Project.id == project_id).first()
+    if not p:
+        return fail("项目不存在")
+    if p.status == "finish":
+        return fail("项目已归档，禁止修改BOM")
+    # 读取上传文件
+    raw = await file.read()
+    try:
+        df = pd.read_excel(io.BytesIO(raw), sheet_name="BOM清单", engine="openpyxl")
+    except Exception:
+        try:
+            df = pd.read_excel(io.BytesIO(raw), engine="openpyxl")
+        except Exception as e:
+            return fail(f"Excel解析失败：{e}")
+    if df is None or df.empty:
+        return fail("Excel为空或无数据行")
+    # 列名兼容（空格/大小写）
+    df.columns = [str(c).strip() for c in df.columns]
+    if "物料ID" not in df.columns or "预估用量" not in df.columns:
+        return fail("Excel缺少必要列「物料ID」或「预估用量」，请使用导出的BOM模板填写")
+    added, skipped_exist, skipped_invalid = 0, 0, 0
+    for _, row in df.iterrows():
+        mid = row.get("物料ID")
+        plan = row.get("预估用量")
+        # 跳过空行
+        if mid is None or (isinstance(mid, float) and mid != mid) or plan is None:
+            skipped_invalid += 1
+            continue
+        try:
+            mid = int(float(mid))
+            plan = float(plan)
+        except Exception:
+            skipped_invalid += 1
+            continue
+        if plan <= 0:
+            skipped_invalid += 1
+            continue
+        m = db.query(Material).filter(Material.id == mid).first()
+        if not m:
+            skipped_invalid += 1
+            continue
+        exists = db.query(ProjectBom).filter(
+            ProjectBom.project_id == project_id,
+            ProjectBom.material_id == mid,
+        ).first()
+        if exists:
+            skipped_exist += 1
+            continue
+        db.add(ProjectBom(
+            project_id=project_id,
+            material_id=mid,
+            plan_num=plan,
+            lock_num=0.0,
+            used_num=0.0,
+        ))
+        added += 1
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        return fail(f"导入失败：{e}")
+    return success({
+        "added": added,
+        "skipped_exist": skipped_exist,
+        "skipped_invalid": skipped_invalid,
+    }, f"导入完成：新增 {added} 条，已存在跳过 {skipped_exist} 条，无效跳过 {skipped_invalid} 条")

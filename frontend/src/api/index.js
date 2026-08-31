@@ -41,6 +41,10 @@ export const deleteProject = (id) => request.delete(`/api/project/delete/${id}`)
 export const saveBom = (data) => request.post('/api/project/bom/save', data)
 export const updateBomPlan = (bomId, data) => request.put(`/api/project/bom/update-plan/${bomId}`, data)
 export const deleteBom = (bomId) => request.delete(`/api/project/bom/delete/${bomId}`)
+// BOM 导入（Excel）
+export const importProjectBom = (projectId, formData) => request.post(`/api/project/bom/import/${projectId}`, formData, {
+  headers: { 'Content-Type': 'multipart/form-data' }
+})
 // 锁定/解锁
 export const bomLock = (data) => request.post('/api/project/bom-lock', data)
 // 制作阶段消耗
