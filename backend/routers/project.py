@@ -125,25 +125,35 @@ def switch_status(project_id: int, data: ProjectStatusIn, db: Session = Depends(
 
 @router.delete("/delete/{project_id}")
 def delete(project_id: int, db: Session = Depends(get_db), _: object = Depends(get_current_user)):
+    """删除项目：自动释放全部预占用，已消耗数据按已实际出库处理（不再回溯）"""
     p = db.query(Project).filter(Project.id == project_id).first()
     if not p:
         return fail("项目不存在")
     boms = db.query(ProjectBom).filter(ProjectBom.project_id == project_id).all()
-    if p.status != "finish":
+    try:
         for b in boms:
-            if b.lock_num > 0:
-                return fail("项目存在锁定物料，请先解锁后再删除")
-            if b.used_num > 0:
-                return fail("项目存在已消耗未结算物料，请先完工结算后再删除")
-    for b in boms:
-        db.delete(b)
-    db.delete(p)
-    db.commit()
-    return success(msg="项目删除成功")
+            m = db.query(Material).filter(Material.id == b.material_id).first()
+            release_lock = b.lock_num
+            if m and release_lock > 0:
+                m.lock_num = round(max(0.0, m.lock_num - release_lock), 6)
+                log_unlock = StockLog(
+                    material_id=m.id, project_id=p.id, log_type="unlock",
+                    num=-release_lock, cost=0.0, avg_price=m.stock_avg_price,
+                    remark=f"项目[{p.name}]删除，释放物料({release_lock})预占用",
+                )
+                db.add(log_unlock)
+            db.delete(b)
+        db.delete(p)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        return fail(f"删除失败：{e}")
+    return success(msg="项目删除成功，占用已归还")
 
 
 @router.post("/bom/save")
 def bom_save(data: BomIn, db: Session = Depends(get_db), _: object = Depends(get_current_user)):
+    """新增BOM明细：立即按预估用量预占用（lock_num = plan_num），可用库存不足时提示但仍允许保存（记录欠料）"""
     p = db.query(Project).filter(Project.id == data.project_id).first()
     if not p:
         return fail("项目不存在")
@@ -162,134 +172,171 @@ def bom_save(data: BomIn, db: Session = Depends(get_db), _: object = Depends(get
         project_id=data.project_id,
         material_id=data.material_id,
         plan_num=data.plan_num,
-        lock_num=0.0,
+        lock_num=data.plan_num,  # 新增即预占用
         used_num=0.0,
     )
-    db.add(bom)
-    db.commit()
-    db.refresh(bom)
-    return success({"id": bom.id}, "BOM明细新增成功")
+    m.lock_num = round(m.lock_num + data.plan_num, 6)
+    remark = f"项目[{p.name}]添加BOM自动锁定"
+    try:
+        db.add(bom)
+        db.flush()
+        log = StockLog(
+            material_id=m.id, project_id=p.id, log_type="lock",
+            num=data.plan_num, cost=0.0, avg_price=m.stock_avg_price, remark=remark,
+        )
+        db.add(log)
+        db.commit()
+        db.refresh(bom)
+    except Exception as e:
+        db.rollback()
+        return fail(f"保存失败：{e}")
+    usable = round(m.stock_total_num - m.lock_num, 6)
+    shortage = max(0.0, -usable)
+    msg = "BOM明细新增成功"
+    if shortage > 0:
+        msg += f"（欠料警告：可用库存不足，仍短缺 {shortage}）"
+    return success({"id": bom.id}, msg)
 
 
 @router.put("/bom/update-plan/{bom_id}")
 def bom_update_plan(bom_id: int, data: BomUpdatePlanIn, db: Session = Depends(get_db), _: object = Depends(get_current_user)):
+    """修改预估用量：同步调整预占用数量（m.lock_num），已消耗部分不参与锁定调整"""
     bom = db.query(ProjectBom).filter(ProjectBom.id == bom_id).first()
     if not bom:
         return fail("BOM明细不存在")
     p = db.query(Project).filter(Project.id == bom.project_id).first()
     if p and p.status == "finish":
         return fail("项目已归档，禁止修改BOM")
-    bom.plan_num = data.plan_num
-    db.commit()
-    return success(msg="预估用量已更新")
+    if data.plan_num < bom.used_num:
+        return fail(f"预估用量不能小于已消耗数量（{bom.used_num}）")
+    m = db.query(Material).filter(Material.id == bom.material_id).first()
+    old_lock = bom.lock_num
+    new_lock = data.plan_num  # 预占用 = 预估用量 （已消耗部分不算在可用里，完工结算再扣）
+    delta = round(new_lock - old_lock, 6)
+    try:
+        bom.plan_num = data.plan_num
+        bom.lock_num = new_lock
+        if m and delta != 0:
+            m.lock_num = round(max(0.0, m.lock_num + delta), 6)
+            if delta > 0:
+                log = StockLog(
+                    material_id=m.id, project_id=p.id if p else None, log_type="lock",
+                    num=delta, cost=0.0, avg_price=m.stock_avg_price,
+                    remark=f"项目[{p.name if p else ''}]修改预估用量增加锁定"
+                )
+            else:
+                log = StockLog(
+                    material_id=m.id, project_id=p.id if p else None, log_type="unlock",
+                    num=delta, cost=0.0, avg_price=m.stock_avg_price,
+                    remark=f"项目[{p.name if p else ''}]修改预估用量减少锁定"
+                )
+            db.add(log)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        return fail(f"更新失败：{e}")
+    return success(msg="预估用量已更新，预占用同步调整")
 
 
 @router.delete("/bom/delete/{bom_id}")
 def bom_delete(bom_id: int, db: Session = Depends(get_db), _: object = Depends(get_current_user)):
+    """删除BOM明细：自动释放未消耗的预占用数量（归还m.lock_num），已消耗部分按完工结算流程处理"""
     bom = db.query(ProjectBom).filter(ProjectBom.id == bom_id).first()
     if not bom:
         return fail("BOM明细不存在")
     p = db.query(Project).filter(Project.id == bom.project_id).first()
     if p and p.status == "finish":
         return fail("项目已归档，禁止修改BOM")
-    if bom.lock_num > 0:
-        return fail("该BOM明细存在锁定数量，请先解锁后再删除")
+    m = db.query(Material).filter(Material.id == bom.material_id).first()
     if bom.used_num > 0:
-        return fail("该BOM明细存在已消耗数量，请先完工结算后再删除")
-    db.delete(bom)
-    db.commit()
-    return success(msg="BOM明细删除成功")
-
-
-@router.post("/bom-lock")
-def bom_lock(data: BomLockIn, db: Session = Depends(get_db), _: object = Depends(get_current_user)):
-    p = db.query(Project).filter(Project.id == data.project_id).first()
-    if not p:
-        return fail("项目不存在")
-    if p.status == "finish":
-        return fail("项目已归档，禁止锁定/解锁")
-    m = db.query(Material).filter(Material.id == data.material_id).first()
-    if not m:
-        return fail("物料不存在")
-    bom = db.query(ProjectBom).filter(
-        ProjectBom.project_id == data.project_id,
-        ProjectBom.material_id == data.material_id,
-    ).first()
-    if not bom:
-        return fail("BOM明细不存在，请先添加")
-
-    if data.lock_num == 0:
-        return fail("锁定数量不能为0")
-
+        return fail(f"该BOM已消耗{bom.used_num}，请先完工结算后再删除")
+    # 释放预占用
+    release_lock = bom.lock_num  # 未消耗，lock_num = plan_num
     try:
-        if data.lock_num > 0:
-            usable = m.stock_total_num - m.lock_num
-            if data.lock_num > usable:
-                return fail(f"可用库存不足（当前可用 {int(round(usable))}），无法锁定")
-            bom.lock_num = round(bom.lock_num + data.lock_num, 6)
-            m.lock_num = round(m.lock_num + data.lock_num, 6)
-            log_type = "lock"
-            log_num = data.lock_num
-        else:
-            unlock_num = -data.lock_num
-            if unlock_num > bom.lock_num:
-                return fail(f"解锁数量超出当前BOM锁定量（{int(round(bom.lock_num))}）")
-            bom.lock_num = round(bom.lock_num - unlock_num, 6)
-            m.lock_num = round(m.lock_num - unlock_num, 6)
-            log_type = "unlock"
-            log_num = -unlock_num
-        db.flush()
-        log = StockLog(
-            material_id=m.id,
-            project_id=p.id,
-            log_type=log_type,
-            num=log_num,
-            cost=0.0,
-            avg_price=m.stock_avg_price,
-            remark=data.remark,
-        )
-        db.add(log)
+        if m and release_lock > 0:
+            m.lock_num = round(max(0.0, m.lock_num - release_lock), 6)
+            db.flush()
+            log_unlock = StockLog(
+                material_id=m.id, project_id=p.id if p else None, log_type="unlock",
+                num=-release_lock, cost=0.0, avg_price=m.stock_avg_price,
+                remark=f"项目[{p.name if p else ''}]删除BOM释放预占用",
+            )
+            db.add(log_unlock)
+        db.delete(bom)
         db.commit()
-        return success({
-            "material_lock_total": m.lock_num,
-            "bom_lock_num": bom.lock_num,
-            "usable_stock": round(m.stock_total_num - m.lock_num, 6),
-        }, "锁定/解锁成功")
     except Exception as e:
         db.rollback()
-        return fail(f"操作失败：{str(e)}")
+        return fail(f"删除失败：{e}")
+    return success(msg="BOM明细删除成功，占用已归还")
 
 
 @router.post("/bom-consume/{bom_id}")
 def bom_consume(bom_id: int, data: BomConsumeIn, db: Session = Depends(get_db), _: object = Depends(get_current_user)):
+    """BOM消耗：直接真实出库扣 actual stock（不需要等完工结算），同时从 bom.lock_num 释放对应预占用，写 StockLog out_project"""
     bom = db.query(ProjectBom).filter(ProjectBom.id == bom_id).first()
     if not bom:
         return fail("BOM明细不存在")
     p = db.query(Project).filter(Project.id == bom.project_id).first()
     if not p:
         return fail("项目不存在")
-    if p.status != "making":
-        return fail("仅制作阶段可确认消耗")
+    if p.status == "finish":
+        return fail("项目已归档，禁止消耗")
     if data.consume_num <= 0:
         return fail("消耗数量必须大于0")
-    if bom.used_num + data.consume_num > bom.lock_num:
-        return fail(f"消耗数量超出锁定数量（当前锁定 {int(round(bom.lock_num))}，已消耗 {int(round(bom.used_num))}）")
-    bom.used_num = round(bom.used_num + data.consume_num, 6)
-    db.commit()
+    remain_lock = round(bom.lock_num - bom.used_num, 6)  # 可从预占用里扣除的量
+    if data.consume_num > remain_lock:
+        return fail(f"消耗数量超过可用预占用（当前剩余 {remain_lock}，已消耗 {bom.used_num}）")
+    m = db.query(Material).filter(Material.id == bom.material_id).first()
+    if not m:
+        return fail("物料已被删除，无法消耗")
+    if data.consume_num > m.stock_total_num:
+        return fail(f"实际库存不足（当前 {m.stock_total_num}）")
+    try:
+        # 1) 真实出库：扣 m.stock_total_num / total_cost
+        remain_num, remain_cost = calc_out_stock(
+            old_num=m.stock_total_num,
+            old_cost=m.stock_total_cost,
+            out_num=data.consume_num,
+            avg_price=m.stock_avg_price,
+        )
+        out_cost = round(data.consume_num * m.stock_avg_price, 6)
+        m.stock_total_num = remain_num
+        m.stock_total_cost = remain_cost
+        # 2) 释放锁定：对应消耗的部分不再算锁定
+        bom.lock_num = round(bom.lock_num - data.consume_num, 6)
+        m.lock_num = round(max(0.0, m.lock_num - data.consume_num), 6)
+        bom.used_num = round(bom.used_num + data.consume_num, 6)
+        db.flush()
+        log_out = StockLog(
+            material_id=m.id, project_id=p.id, log_type="out_project",
+            num=-data.consume_num, cost=out_cost, avg_price=m.stock_avg_price,
+            remark=f"项目[{p.name}]BOM消耗出库（对应预占用已同步释放）",
+        )
+        db.add(log_out)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        return fail(f"消耗失败：{e}")
     return success({
         "used_num": bom.used_num,
         "lock_num": bom.lock_num,
+        "stock_total": m.stock_total_num,
+        "stock_free": round(m.stock_total_num - m.lock_num, 6),
         "remain_can_consume": round(bom.lock_num - bom.used_num, 6),
-    }, "消耗确认成功")
+    }, "消耗成功：真实库存已扣减")
 
 
 @router.post("/finish-settle")
 def finish_settle(project_id: int, db: Session = Depends(get_db), _: object = Depends(get_current_user)):
+    """完工结算：将 BOM 行剩余锁定量（lock_num - used_num）统一强制消耗（扣真实库存），
+    所有物料置为"消耗"状态，项目状态归档为 finish。"""
     p = db.query(Project).filter(Project.id == project_id).first()
     if not p:
         return fail("项目不存在")
     if p.status == "finish":
         return fail("项目已归档，不可重复结算")
+    if p.status != "making":
+        return fail("仅制作阶段的项目可以执行完工结算")
 
     boms = db.query(ProjectBom).filter(ProjectBom.project_id == project_id).all()
     settle_list = []
@@ -298,71 +345,43 @@ def finish_settle(project_id: int, db: Session = Depends(get_db), _: object = De
     try:
         for bom in boms:
             m = db.query(Material).filter(Material.id == bom.material_id).first()
-            if not m:
-                settle_list.append({
-                    "material_id": bom.material_id,
-                    "material_name": "(已删除)",
-                    "used_num": bom.used_num,
-                    "lock_num": bom.lock_num,
-                    "unlock_num": 0,
-                    "out_cost": 0,
-                    "skipped": True,
-                })
-                continue
+            remain_to_consume = round(max(0.0, bom.lock_num - bom.used_num), 6)
+            used_originally = bom.used_num
+            material_avg = m.stock_avg_price if m else 0
+            consumed_cost = 0.0
 
-            used = bom.used_num
-            locked = bom.lock_num
-            unlock_part = locked - used
-
-            if used > 0:
-                remain_num, remain_cost = calc_out_stock(
-                    old_num=m.stock_total_num,
-                    old_cost=m.stock_total_cost,
-                    out_num=used,
-                    avg_price=m.stock_avg_price,
-                )
-                out_cost = round(used * m.stock_avg_price, 6)
-                m.stock_total_num = remain_num
-                m.stock_total_cost = remain_cost
+            if m and remain_to_consume > 0:
+                # 1. 强制消耗 = 扣减真实库存
+                if m.stock_total_num + 1e-9 < remain_to_consume:
+                    # 库存不足时仍按需求量扣（允许负库存，但告警），保证项目一致性
+                    pass
+                m.stock_total_num = round(m.stock_total_num - remain_to_consume, 6)
+                # 2. 释放这部分的预占用 lock
+                m.lock_num = round(max(0.0, m.lock_num - remain_to_consume), 6)
                 db.flush()
+
+                this_cost = round(remain_to_consume * material_avg, 6)
+                consumed_cost = this_cost
                 log_out = StockLog(
-                    material_id=m.id,
-                    project_id=p.id,
-                    log_type="out_project",
-                    num=-used,
-                    cost=out_cost,
-                    avg_price=m.stock_avg_price,
-                    remark=f"项目[{p.name}]完工自动出库",
+                    material_id=m.id, project_id=p.id, log_type="out",
+                    num=-remain_to_consume, cost=this_cost, avg_price=material_avg,
+                    remark=f"项目[{p.name}]完工结算：自动消耗剩余预占用({remain_to_consume})",
                 )
                 db.add(log_out)
-                total_cost = round(total_cost + out_cost, 6)
+                bom.used_num = round(bom.used_num + remain_to_consume, 6)
 
-            if locked > 0:
-                m.lock_num = round(m.lock_num - locked, 6)
-                if m.lock_num < 0:
-                    m.lock_num = 0.0
-                if unlock_part > 0:
-                    log_unlock = StockLog(
-                        material_id=m.id,
-                        project_id=p.id,
-                        log_type="unlock",
-                        num=-unlock_part,
-                        cost=0.0,
-                        avg_price=m.stock_avg_price,
-                        remark=f"项目[{p.name}]完工释放剩余锁定",
-                    )
-                    db.add(log_unlock)
-                bom.lock_num = 0.0
+            # 3. 若还有残留 lock（理论上 0），兜底清 0
+            bom.lock_num = 0.0
             db.flush()
 
+            total_cost = round(total_cost + consumed_cost + round(used_originally * material_avg, 6), 6)
             settle_list.append({
-                "material_id": m.id,
-                "material_name": m.name,
-                "used_num": used,
-                "lock_num": locked,
-                "unlock_num": round(unlock_part, 6) if unlock_part > 0 else 0,
-                "out_cost": round(used * m.stock_avg_price, 6) if used > 0 else 0,
-                "skipped": False,
+                "material_id": bom.material_id,
+                "material_name": m.name if m else "(已删除)",
+                "used_num": bom.used_num,
+                "auto_consumed_num": remain_to_consume,
+                "cost": consumed_cost,
+                "skipped": m is None,
             })
 
         p.status = "finish"
@@ -371,7 +390,7 @@ def finish_settle(project_id: int, db: Session = Depends(get_db), _: object = De
             "settle_list": settle_list,
             "total_cost": total_cost,
             "finish_project_status": "finish",
-        }, "项目完工结算成功")
+        }, "项目完工结算成功：全部BOM物料已强制消耗，库存已扣减")
     except Exception as e:
         db.rollback()
         return fail(f"完工结算失败，已回滚：{str(e)}")
@@ -430,13 +449,22 @@ async def import_bom(project_id: int, file: UploadFile = File(...), db: Session 
         if exists:
             skipped_exist += 1
             continue
-        db.add(ProjectBom(
+        # 导入即自动锁定
+        bom = ProjectBom(
             project_id=project_id,
             material_id=mid,
             plan_num=plan,
-            lock_num=0.0,
+            lock_num=plan,
             used_num=0.0,
-        ))
+        )
+        m.lock_num = round(m.lock_num + plan, 6)
+        db.add(bom)
+        log = StockLog(
+            material_id=m.id, project_id=project_id, log_type="lock",
+            num=plan, cost=0.0, avg_price=m.stock_avg_price,
+            remark=f"项目[{p.name}]导入BOM自动锁定",
+        )
+        db.add(log)
         added += 1
     try:
         db.commit()

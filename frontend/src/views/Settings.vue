@@ -185,7 +185,6 @@
               <el-icon><Refresh /></el-icon> 刷新
             </el-button>
           </div>
-          <p class="rev-footer">Developed by TUTUTUKU</p>
         </template>
 
         <!-- 自动备份 -->
@@ -294,7 +293,7 @@ async function saveCfg(key, value) {
 }
 
 // 版本
-const version = ref('1.2.0')
+const version = ref('1.4.0')
 const revision = reactive({ global_check_code: 0, server_time: '', version: '' })
 async function loadRevision() {
   try {

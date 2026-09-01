@@ -2,7 +2,7 @@
 """冲突处理接口"""
 from __future__ import annotations
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -10,6 +10,7 @@ from database import get_db
 from dependencies import get_current_user, principal_username
 from core.response import success, fail
 from core.ws_manager import ws_mgr
+from core.op_log_service import write_op_log
 from models.conflict import Conflict
 from schemas.conflict import ConflictResolveIn, ConflictBatchResolveIn
 
@@ -88,6 +89,27 @@ async def resolve(
     else:
         return fail("非法 status：accepted / dismissed")
     c.update_time = datetime.now()
+    db.flush()
+    # 操作日志：冲突处理
+    action_label = "conflict_accept" if data.status == "accepted" else "conflict_dismiss"
+    try:
+        snaps = json.loads(c.snapshots_json or "[]")
+    except Exception:
+        snaps = []
+    write_op_log(
+        db, username=principal_username(user), source="web", action=action_label,
+        material_id=c.material_id,
+        detail={
+            "conflict_id": c.id,
+            "stage_code": c.stage_code,
+            "status": data.status,
+            "chosen_snapshot_index": data.chosen_snapshot_index if data.status == "accepted" else None,
+            "snapshot_count": len(snaps),
+            "summary": snaps[data.chosen_snapshot_index]["summary"]
+            if data.status == "accepted" and snaps and 0 <= (data.chosen_snapshot_index or 0) < len(snaps)
+            else "",
+        },
+    )
     db.commit()
     await ws_mgr.notify_conflict_resolved(c.id, c.material_id, c.status)
     return success(_conflict_to_dict(c), "冲突处理成功")
@@ -104,6 +126,7 @@ async def resolve_batch(
         return fail("未选择冲突")
     accepted_ids: list[int] = []
     mid_map: dict[int, int] = {}
+    processed_ids: list[int] = []
     rows = db.query(Conflict).filter(Conflict.id.in_(ids)).all()
     for c in rows:
         if c.status in ("accepted", "dismissed"):
@@ -123,13 +146,212 @@ async def resolve_batch(
             c.status = "dismissed"
         c.operator = principal_username(user)
         c.update_time = datetime.now()
+        db.flush()
+        # 操作日志：批量冲突处理（每条都记）
+        try:
+            snaps = json.loads(c.snapshots_json or "[]")
+        except Exception:
+            snaps = []
+        action_label = "conflict_accept_batch" if data.status == "accepted" else "conflict_dismiss_batch"
+        write_op_log(
+            db, username=principal_username(user), source="web", action=action_label,
+            material_id=c.material_id,
+            detail={
+                "conflict_id": c.id,
+                "stage_code": c.stage_code,
+                "status": data.status,
+                "chosen_snapshot_index": c.chosen_source_index if data.status == "accepted" else None,
+                "snapshot_count": len(snaps),
+                "batch_size": len(rows),
+            },
+        )
         if c.status == "accepted":
             accepted_ids.append(c.id)
         mid_map[c.id] = c.material_id
+        processed_ids.append(c.id)
     db.commit()
     mids = list(set(mid_map.values()))
     if accepted_ids:
         await ws_mgr.broadcast("conflict:resolved:batch", {
             "ids": accepted_ids, "material_ids": mids, "status": data.status,
         })
-    return success({"processed": len(rows), "ids": [c.id for c in rows]}, "批量处理完成")
+    return success({"processed": len(processed_ids), "ids": processed_ids}, "批量处理完成")
+
+
+@router.post("/seed-demo")
+def seed_demo(
+    clear_first: bool = False,
+    db: Session = Depends(get_db),
+    user: str = Depends(get_current_user),
+):
+    """插入冲突演示测试数据（用于前端操作演示与截图）"""
+    if clear_first:
+        db.query(Conflict).delete()
+        db.commit()
+
+    now = datetime.now()
+
+    def _ts(offset_min: int) -> str:
+        return (now - timedelta(minutes=offset_min)).strftime("%Y-%m-%d %H:%M:%S")
+
+    demo_rows = [
+        # 1. 入库 vs 入库 冲突：APP +30 vs Web -15（场景：双方同时入库/出库同一物料）
+        Conflict(
+            material_id=1,
+            stage_code=1001,
+            snapshots_json=json.dumps([
+                {
+                    "source": "app",
+                    "device": "HUAWEI-P60-0xA1",
+                    "op_type": "stock_in",
+                    "fixed_ts": _ts(12),
+                    "local_device_ts": _ts(14),
+                    "time_correction_flag": "ok",
+                    "diff_fields": {"stock_total_num": 30, "stock_avg_price": 12.5},
+                    "summary": "APP入库：M3x10 螺丝 30 颗，加权均价 12.5 元/颗（库存：原 20 → 50）",
+                },
+                {
+                    "source": "web",
+                    "device": "chrome-win11-pc01",
+                    "op_type": "stock_out_temp",
+                    "fixed_ts": _ts(10),
+                    "local_device_ts": _ts(10),
+                    "time_correction_flag": "ok",
+                    "diff_fields": {"stock_total_num": -15},
+                    "summary": "Web临时出库：M3x10 螺丝 15 颗（临时借出，未归还）（库存：原 20 → 5）",
+                },
+            ], ensure_ascii=False),
+            status="pending",
+            create_time=now - timedelta(minutes=8),
+            update_time=now - timedelta(minutes=8),
+        ),
+        # 2. 物料编辑冲突：APP改规格 vs Web改备注
+        Conflict(
+            material_id=2,
+            stage_code=1002,
+            snapshots_json=json.dumps([
+                {
+                    "source": "app",
+                    "device": "XIAOMI-13Pro-0xB2",
+                    "op_type": "material_update",
+                    "fixed_ts": _ts(38),
+                    "local_device_ts": _ts(42),
+                    "time_correction_flag": "forced",
+                    "diff_fields": {"spec": "Φ8x30mm 镀锌", "warn_num": 20},
+                    "summary": "APP编辑：外六角螺栓 规格改为『Φ8x30mm 镀锌』，告警阈值改为 20",
+                },
+                {
+                    "source": "web",
+                    "device": "edge-win10-pc02",
+                    "op_type": "material_update",
+                    "fixed_ts": _ts(35),
+                    "local_device_ts": _ts(35),
+                    "time_correction_flag": "ok",
+                    "diff_fields": {"remark": "采购自五金商城A店，批次B20250812"},
+                    "summary": "Web编辑：外六角螺栓 备注补充『采购自五金商城A店，批次B20250812』",
+                },
+            ], ensure_ascii=False),
+            status="pending",
+            create_time=now - timedelta(minutes=30),
+            update_time=now - timedelta(minutes=30),
+        ),
+        # 3. BOM 锁定冲突：APP锁定 vs Web消耗
+        Conflict(
+            material_id=3,
+            stage_code=1003,
+            snapshots_json=json.dumps([
+                {
+                    "source": "app",
+                    "device": "HUAWEI-P60-0xA1",
+                    "op_type": "bom_lock",
+                    "fixed_ts": _ts(65),
+                    "local_device_ts": _ts(70),
+                    "time_correction_flag": "forced",
+                    "diff_fields": {"lock_num": 50, "project_id": 7, "project_name": "机器人底座装配"},
+                    "summary": "APP BOM锁定：5mm 亚克力板 锁定 50 块（项目『机器人底座装配』）",
+                },
+                {
+                    "source": "web",
+                    "device": "chrome-win11-pc01",
+                    "op_type": "stock_out_project",
+                    "fixed_ts": _ts(60),
+                    "local_device_ts": _ts(60),
+                    "time_correction_flag": "ok",
+                    "diff_fields": {"stock_total_num": -20, "project_id": 7},
+                    "summary": "Web项目出库：5mm 亚克力板 出库 20 块（项目『机器人底座装配』）",
+                },
+            ], ensure_ascii=False),
+            status="pending",
+            create_time=now - timedelta(hours=1),
+            update_time=now - timedelta(hours=1),
+        ),
+        # 4. 已处理（已生效）示例：优先Web
+        Conflict(
+            material_id=4,
+            stage_code=1000,
+            snapshots_json=json.dumps([
+                {
+                    "source": "app",
+                    "device": "OPPO-FindX7-0xC3",
+                    "op_type": "stock_in",
+                    "fixed_ts": _ts(180),
+                    "local_device_ts": _ts(190),
+                    "time_correction_flag": "ok",
+                    "diff_fields": {"stock_total_num": 10},
+                    "summary": "APP入库：铜柱 M2x20 10 颗",
+                },
+                {
+                    "source": "web",
+                    "device": "chrome-win11-pc01",
+                    "op_type": "stock_in",
+                    "fixed_ts": _ts(175),
+                    "local_device_ts": _ts(175),
+                    "time_correction_flag": "ok",
+                    "diff_fields": {"stock_total_num": 100, "stock_avg_price": 0.8},
+                    "summary": "Web入库：铜柱 M2x20 100 颗，均价 0.8 元/颗",
+                },
+            ], ensure_ascii=False),
+            status="accepted",
+            chosen_source_index=1,
+            operator="admin",
+            create_time=now - timedelta(hours=3),
+            update_time=now - timedelta(hours=2),
+        ),
+        # 5. 已放弃示例
+        Conflict(
+            material_id=5,
+            stage_code=998,
+            snapshots_json=json.dumps([
+                {
+                    "source": "app",
+                    "device": "VIVO-X100-0xD4",
+                    "op_type": "material_create",
+                    "fixed_ts": _ts(300),
+                    "local_device_ts": _ts(320),
+                    "time_correction_flag": "forced",
+                    "diff_fields": {"name": "测试草稿物料-勿用", "spec": "草稿"},
+                    "summary": "APP创建物料：草稿（测试）",
+                },
+            ], ensure_ascii=False),
+            status="dismissed",
+            operator="admin",
+            create_time=now - timedelta(hours=5),
+            update_time=now - timedelta(hours=4, minutes=50),
+        ),
+    ]
+
+    for row in demo_rows:
+        db.add(row)
+    db.flush()
+    # 操作日志：插入冲突演示数据
+    write_op_log(
+        db, username=principal_username(user), source="web", action="conflict_seed_demo",
+        detail={
+            "inserted": len(demo_rows),
+            "clear_first": bool(clear_first),
+            "conflict_material_ids": [r.material_id for r in demo_rows],
+            "conflict_stage_codes": [r.stage_code for r in demo_rows],
+        },
+    )
+    db.commit()
+    return success({"inserted": len(demo_rows)}, "冲突演示数据插入完成，可刷新前端冲突处理页查看")
