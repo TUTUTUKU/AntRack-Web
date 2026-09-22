@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from sqlalchemy import Column, Integer, String, Float, DateTime
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text
 from datetime import datetime
 from database import Base
 
@@ -17,6 +17,9 @@ class Material(Base):
     image = Column(String(255), default="", nullable=False)
     warn_num = Column(Float, default=0.0, nullable=False)
     remark = Column(String(500), default="", nullable=False)
+    tech_content = Column(Text, default="", nullable=False)
+    tech_images = Column(String(2000), default="", nullable=False)
+    manual = Column(String(255), default="", nullable=False)
 
     stock_total_num = Column(Float, default=0.0, nullable=False)
     stock_total_cost = Column(Float, default=0.0, nullable=False)

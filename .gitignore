@@ -26,6 +26,8 @@ backend/static/*.jpeg
 backend/static/*.gif
 backend/static/*.webp
 backend/static/*.bmp
+backend/static/*.pdf
+backend/static/*.ans
 
 # ---------- Python / FastAPI 后端 ----------
 backend/__pycache__/

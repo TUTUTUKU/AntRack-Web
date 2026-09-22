@@ -110,6 +110,57 @@
       <el-form-item label="备注">
         <el-input v-model="form.remark" type="textarea" :rows="2" maxlength="500" show-word-limit placeholder="选填" />
       </el-form-item>
+
+      <!-- 技术手册区域标题 -->
+      <div class="section-title">
+        <span class="section-bar"></span>
+        <span class="section-text">技术手册</span>
+      </div>
+
+      <!-- 技术参数文字 -->
+      <el-form-item label="技术参数">
+        <el-input v-model="form.tech_content" type="textarea" :rows="4" placeholder="可填写规格参数、使用说明、注意事项等，支持换行" />
+      </el-form-item>
+
+      <!-- 技术参数图片（多图） -->
+      <el-form-item label="参数图片">
+        <div class="tech-images">
+          <div v-for="(img, idx) in techImgList" :key="idx" class="tech-img-item">
+            <el-image :src="img" :preview-src-list="techImgList" :preview-teleported="true" :initial-index="idx" fit="cover" class="tech-img" />
+            <el-icon class="tech-img-del" @click="removeTechImg(idx)"><Close /></el-icon>
+          </div>
+          <el-upload
+            class="tech-img-upload"
+            :show-file-list="false"
+            :http-request="uploadTechImg"
+            accept="image/*"
+          >
+            <div class="upload-placeholder small">
+              <el-icon><Plus /></el-icon>
+              <span>上传图片</span>
+            </div>
+          </el-upload>
+        </div>
+      </el-form-item>
+
+      <!-- 技术手册 PDF -->
+      <el-form-item label="PDF手册">
+        <div class="manual-box">
+          <el-upload
+            :show-file-list="false"
+            :http-request="onUploadManual"
+            accept="application/pdf,.pdf"
+          >
+            <el-button size="small" type="primary" plain><el-icon><Upload /></el-icon>上传PDF</el-button>
+          </el-upload>
+          <template v-if="form.manual">
+            <a :href="form.manual" target="_blank" class="manual-link" @click="openPdf(form.manual)">
+              <el-icon><Document /></el-icon>已上传PDF，点击预览
+            </a>
+            <el-button link type="danger" size="small" @click="form.manual = ''">移除</el-button>
+          </template>
+        </div>
+      </el-form-item>
     </el-form>
     <template #footer>
       <el-button @click="show = false">取消</el-button>
@@ -121,8 +172,8 @@
 <script setup>
 import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
-import { getCategoryList, saveMaterial, updateMaterial, uploadImage, nextMaterialCode } from '@/api'
+import { Plus, Close, Upload, Document } from '@element-plus/icons-vue'
+import { getCategoryList, saveMaterial, updateMaterial, uploadImage, uploadManual, nextMaterialCode } from '@/api'
 
 const props = defineProps({ visible: Boolean, data: Object })
 const emit = defineEmits(['update:visible', 'success'])
@@ -138,7 +189,12 @@ const AUTO_CODE_RE = /^AR\d{6}$/
 const form = reactive({
   name: '', code: '', parent_category_id: null, category_id: null,
   spec: '', unit: '个', price_unit: '¥', image: '', warn_num: 0, remark: '',
+  tech_content: '', tech_images: '', manual: '',
   init_stock: 0, init_cost: 0
+})
+const techImgList = computed({
+  get: () => { try { return JSON.parse(form.tech_images || '[]') } catch { return [] } },
+  set: (v) => { form.tech_images = JSON.stringify(v) }
 })
 const rules = {
   name: [{ required: true, message: '请输入物料名称', trigger: 'blur' }],
@@ -190,6 +246,9 @@ watch(() => props.visible, async v => {
       form.image = props.data.image
       form.warn_num = props.data.warn_num
       form.remark = props.data.remark
+      form.tech_content = props.data.tech_content || ''
+      form.tech_images = props.data.tech_images || ''
+      form.manual = props.data.manual || ''
       const cat = allCats.value.find(c => c.id === props.data.category_id)
       form.parent_category_id = cat ? cat.parent_id : null
       // 编辑模式：原有编码为空 / 自定义（非 ARxxxxxx）→ placeholder 显示下一个自动编号（直接编号）
@@ -202,6 +261,7 @@ watch(() => props.visible, async v => {
       Object.assign(form, {
         name: '', code: '', parent_category_id: null, category_id: null,
         spec: '', unit: '个', price_unit: '¥', image: '', warn_num: 0, remark: '',
+        tech_content: '', tech_images: '', manual: '',
         init_stock: 0, init_cost: 0
       })
       try {
@@ -223,6 +283,38 @@ async function customUpload({ file }) {
   } catch (e) {}
 }
 
+async function uploadTechImg({ file }) {
+  const fd = new FormData()
+  fd.append('file', file)
+  try {
+    const res = await uploadImage(fd)
+    const list = techImgList.value.slice()
+    list.push(res.data.path)
+    techImgList.value = list
+    ElMessage.success('图片上传成功')
+  } catch (e) {}
+}
+
+function removeTechImg(idx) {
+  const list = techImgList.value.slice()
+  list.splice(idx, 1)
+  techImgList.value = list
+}
+
+async function onUploadManual({ file }) {
+  const fd = new FormData()
+  fd.append('file', file)
+  try {
+    const res = await uploadManual(fd)
+    form.manual = res.data.path
+    ElMessage.success('PDF上传成功')
+  } catch (e) {}
+}
+
+function openPdf(url) {
+  window.open(url, '_blank')
+}
+
 function onClose() { emit('update:visible', false) }
 
 function onSubmit() {
@@ -233,7 +325,8 @@ function onSubmit() {
       const basePayload = {
         name: form.name, category_id: form.category_id, code: form.code,
         spec: form.spec, unit: form.unit, price_unit: form.price_unit,
-        image: form.image, warn_num: form.warn_num, remark: form.remark
+        image: form.image, warn_num: form.warn_num, remark: form.remark,
+        tech_content: form.tech_content, tech_images: form.tech_images, manual: form.manual
       }
       if (isEdit.value) {
         await updateMaterial(props.data.id, basePayload)
@@ -261,4 +354,15 @@ function onSubmit() {
 .input-center :deep(.el-input__wrapper .el-input__inner) {
   text-align: center;
 }
+.tech-images { display: flex; flex-wrap: wrap; gap: 10px; }
+.tech-img-item { position: relative; width: 80px; height: 80px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
+.tech-img { width: 100%; height: 100%; object-fit: cover; }
+.tech-img-del { position: absolute; top: 2px; right: 2px; background: rgba(0,0,0,.6); color: #fff; border-radius: 50%; font-size: 14px; padding: 2px; cursor: pointer; }
+.tech-img-upload :deep(.el-upload) { width: 80px; height: 80px; border: 1px dashed var(--border); border-radius: 6px; display: flex; align-items: center; justify-content: center; background: var(--card-2); }
+.upload-placeholder.small { color: var(--text-sub); display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 12px; }
+.manual-box { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.manual-link { display: inline-flex; align-items: center; gap: 4px; color: var(--primary); text-decoration: none; font-size: 13px; }
+.section-title { display: flex; align-items: center; gap: 8px; margin: 18px 0 4px; }
+.section-bar { width: 3px; height: 14px; background: var(--primary); border-radius: 2px; }
+.section-text { font-size: 14px; font-weight: 600; color: var(--text-main); }
 </style>

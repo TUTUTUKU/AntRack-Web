@@ -412,6 +412,19 @@ a { color: var(--primary); text-decoration: none; }
 
 .el-date-editor.el-input__wrapper { background: var(--card) !important; }
 
+/* 图片预览：强制顶层，避免被弹窗遮挡 */
+.el-image-viewer__wrapper { z-index: 9999 !important; }
+
+/* 字数统计：去掉白底，用主题色 */
+.el-input__count {
+  background: transparent !important;
+  color: var(--text-sub) !important;
+}
+.el-input__count .el-input__count-inner {
+  background: transparent !important;
+  color: var(--text-sub) !important;
+}
+
 /* 移动端适配 */
 @media (max-width: 768px) {
   .page-card { padding: 12px; border-radius: 8px; }

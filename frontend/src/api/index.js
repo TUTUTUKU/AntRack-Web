@@ -25,6 +25,7 @@ export const updateMaterial = (id, data) => request.put(`/api/material/update/${
 export const deleteMaterial = (id) => request.delete(`/api/material/delete/${id}`)
 export const deleteMaterialBatch = (ids) => request.post('/api/material/delete-batch', { ids })
 export const uploadImage = (formData) => request.post('/api/material/upload-image', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+export const uploadManual = (formData) => request.post('/api/material/upload-manual', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
 // 入库
 export const stockIn = (data) => request.post('/api/material/stock-in', data)
 // 临时出库
