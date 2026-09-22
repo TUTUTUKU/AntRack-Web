@@ -7,7 +7,7 @@
       </div>
       <div class="detail-top" v-if="data">
         <div class="img-box">
-          <el-image v-if="data.image" :src="data.image" :preview-src-list="[data.image]" fit="cover" class="big-img" />
+          <el-image v-if="data.image" :src="data.image" :preview-src-list="[data.image]" :preview-teleported="true" fit="cover" class="big-img" />
           <div v-else class="no-img"><el-icon><Picture /></el-icon></div>
         </div>
         <div class="info-box">
@@ -71,6 +71,36 @@
             </el-table-column>
           </el-table>
         </el-tab-pane>
+        <el-tab-pane label="技术手册" name="manual">
+          <div v-if="hasManual" class="manual-view">
+            <div v-if="data.tech_content" class="manual-content">
+              <h4 class="manual-subtitle">技术参数</h4>
+              <pre class="tech-text">{{ data.tech_content }}</pre>
+            </div>
+            <div v-if="techImages.length" class="manual-images">
+              <h4 class="manual-subtitle">参数图片</h4>
+              <el-image
+                v-for="(img, idx) in techImages" :key="idx"
+                :src="img"
+                :preview-src-list="techImages"
+                :preview-teleported="true"
+                :initial-index="idx"
+                fit="cover"
+                class="tech-img"
+              />
+            </div>
+            <div v-if="data.manual" class="manual-pdf">
+              <h4 class="manual-subtitle">
+                PDF手册
+                <a :href="data.manual" target="_blank" class="pdf-open">
+                  <el-icon><ZoomIn /></el-icon>新窗口打开
+                </a>
+              </h4>
+              <iframe :src="data.manual" class="pdf-frame"></iframe>
+            </div>
+          </div>
+          <el-empty v-else description="暂无技术手册，可在编辑物料时上传" />
+        </el-tab-pane>
       </el-tabs>
     </div>
 
@@ -81,9 +111,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { ZoomIn } from '@element-plus/icons-vue'
 import { getMaterialDetail, getStockLogList, deleteMaterial } from '@/api'
 import MaterialDialog from '@/components/MaterialDialog.vue'
 import StockInDialog from '@/components/StockInDialog.vue'
@@ -97,6 +128,11 @@ const data = ref(null)
 const logs = ref([])
 const bomProjects = ref([])
 const activeTab = ref('log')
+
+const techImages = computed(() => {
+  try { return JSON.parse(data.value?.tech_images || '[]') } catch { return [] }
+})
+const hasManual = computed(() => !!(data.value?.tech_content || techImages.value.length || data.value?.manual))
 
 const dialogVisible = ref(false)
 const inDialogVisible = ref(false)
@@ -158,4 +194,13 @@ onMounted(loadData)
 .stock-item b.danger { color: var(--danger); }
 .action-bar { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; gap: 10px; flex-wrap: wrap; }
 @media (max-width: 768px) { .big-img, .no-img { width: 140px; height: 140px; } }
+.manual-view { padding: 8px 0; }
+.manual-subtitle { margin: 16px 0 10px; font-size: 15px; color: var(--text-main); display: flex; align-items: center; gap: 10px; }
+.manual-subtitle:first-child { margin-top: 0; }
+.pdf-open { font-size: 12px; color: var(--primary); text-decoration: none; display: inline-flex; align-items: center; gap: 2px; font-weight: normal; }
+.tech-text { white-space: pre-wrap; word-break: break-word; background: var(--card-2); padding: 12px 16px; border-radius: 8px; line-height: 1.7; color: var(--text-main); font-family: inherit; font-size: 14px; margin: 0; }
+.manual-images { display: flex; flex-wrap: wrap; gap: 12px; }
+.tech-img { width: 140px; height: 140px; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; }
+.manual-pdf { }
+.pdf-frame { width: 100%; height: 600px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
 </style>

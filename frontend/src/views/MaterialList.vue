@@ -40,7 +40,7 @@
       >
         <el-table-column label="缩略图" width="70">
           <template #default="{ row }">
-            <el-image v-if="row.image" :src="row.image" :preview-src-list="[row.image]" fit="cover" style="width:40px;height:40px;border-radius:6px" />
+            <el-image v-if="row.image" :src="row.image" :preview-src-list="[row.image]" :preview-teleported="true" fit="cover" style="width:40px;height:40px;border-radius:6px" />
             <span v-else class="no-img">无</span>
           </template>
         </el-table-column>

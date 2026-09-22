@@ -40,6 +40,9 @@ def _enrich(m: Material, db: Session) -> dict:
         "image": m.image,
         "warn_num": m.warn_num,
         "remark": m.remark,
+        "tech_content": m.tech_content or "",
+        "tech_images": m.tech_images or "",
+        "manual": m.manual or "",
         "stock_total_num": m.stock_total_num,
         "stock_total_cost": m.stock_total_cost,
         "stock_avg_price": m.stock_avg_price,
@@ -149,6 +152,9 @@ def save(data: MaterialIn, db: Session = Depends(get_db), _: object = Depends(ge
         image=data.image,
         warn_num=data.warn_num,
         remark=data.remark,
+        tech_content=data.tech_content or "",
+        tech_images=data.tech_images or "",
+        manual=data.manual or "",
         stock_total_num=init_num,
         stock_total_cost=init_cost_total,
         stock_avg_price=init_avg_price,
@@ -191,6 +197,9 @@ def update(material_id: int, data: MaterialIn, db: Session = Depends(get_db), _:
     m.image = data.image
     m.warn_num = data.warn_num
     m.remark = data.remark
+    m.tech_content = data.tech_content or ""
+    m.tech_images = data.tech_images or ""
+    m.manual = data.manual or ""
     db.commit()
     return success(msg="物料修改成功")
 
@@ -244,6 +253,22 @@ async def upload_image(file: UploadFile = File(...), _: object = Depends(get_cur
     content = await file.read()
     if len(content) > 5 * 1024 * 1024:
         return fail("图片大小不能超过 5MB")
+    filename = f"{uuid.uuid4().hex}{ext}"
+    save_path = STATIC_DIR / filename
+    save_path.write_bytes(content)
+    return success({"url": f"{STATIC_URL_PREFIX}/{filename}", "path": f"{STATIC_URL_PREFIX}/{filename}"}, "上传成功")
+
+
+@router.post("/upload-manual")
+async def upload_manual(file: UploadFile = File(...), _: object = Depends(get_current_user)):
+    if not file.filename:
+        return fail("未选择文件")
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext != ".pdf":
+        return fail("仅支持 PDF 格式")
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        return fail("PDF 大小不能超过 20MB")
     filename = f"{uuid.uuid4().hex}{ext}"
     save_path = STATIC_DIR / filename
     save_path.write_bytes(content)

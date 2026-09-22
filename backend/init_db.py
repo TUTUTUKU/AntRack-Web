@@ -88,6 +88,9 @@ def _migrate_columns():
     # V1.2 新增列（SQLite：只加 name+type，默认值和 NOT NULL 通过 UPDATE + 业务写入保证）
     material_cols = [
         "server_commit_ts DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL",
+        "tech_content TEXT DEFAULT '' NOT NULL",
+        "tech_images VARCHAR(2000) DEFAULT '' NOT NULL",
+        "manual VARCHAR(255) DEFAULT '' NOT NULL",
     ]
     stock_log_cols = [
         "server_commit_ts DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL",
