@@ -6,9 +6,8 @@
         <el-button link @click="$router.back()" style="margin-left:auto"><el-icon><Back /></el-icon>返回</el-button>
       </div>
       <div class="detail-top" v-if="data">
-        <div class="img-box">
-          <el-image v-if="data.image" :src="data.image" :preview-src-list="[data.image]" :preview-teleported="true" fit="cover" class="big-img" />
-          <div v-else class="no-img"><el-icon><Picture /></el-icon></div>
+        <div class="img-box" :style="{ backgroundImage: `url(${matBgUrl})` }" @click="data.image && (previewVisible = true)">
+          <img v-if="data.image" :src="data.image" class="big-img" />
         </div>
         <div class="info-box">
           <h2 class="mat-name">{{ data.name }}</h2>
@@ -98,6 +97,12 @@
               </h4>
               <iframe :src="data.manual" class="pdf-frame"></iframe>
             </div>
+            <div v-if="data.model_file" class="manual-model">
+              <h4 class="manual-subtitle">3D模型</h4>
+              <a :href="data.model_file" download class="model-download">
+                <el-icon><Download /></el-icon>{{ modelFileName }}（点击下载）
+              </a>
+            </div>
           </div>
           <el-empty v-else description="暂无技术手册，可在编辑物料时上传" />
         </el-tab-pane>
@@ -107,6 +112,14 @@
     <MaterialDialog v-model:visible="dialogVisible" :data="data" @success="loadData" />
     <StockInDialog v-model:visible="inDialogVisible" :material="data" @success="loadData" />
     <StockOutTempDialog v-model:visible="outDialogVisible" :material="data" @success="loadData" />
+
+    <!-- 图片预览：背景图 + 物料图叠加 -->
+    <div v-if="previewVisible" class="img-preview-mask" @click="previewVisible = false">
+      <div class="img-preview-stage" :style="{ backgroundImage: `url(${matBgUrl})` }">
+        <img v-if="data.image" :src="data.image" class="img-preview-inner" />
+      </div>
+      <el-icon class="img-preview-close"><Close /></el-icon>
+    </div>
   </div>
 </template>
 
@@ -114,12 +127,13 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ZoomIn } from '@element-plus/icons-vue'
+import { ZoomIn, Close, Download } from '@element-plus/icons-vue'
 import { getMaterialDetail, getStockLogList, deleteMaterial } from '@/api'
 import MaterialDialog from '@/components/MaterialDialog.vue'
 import StockInDialog from '@/components/StockInDialog.vue'
 import StockOutTempDialog from '@/components/StockOutTempDialog.vue'
 import { fmtNum, fmtPrice } from '@/utils/format'
+import { getMaterialBgUrl } from '@/utils/materialBg'
 
 const route = useRoute()
 const router = useRouter()
@@ -128,11 +142,18 @@ const data = ref(null)
 const logs = ref([])
 const bomProjects = ref([])
 const activeTab = ref('log')
+const previewVisible = ref(false)
+const matBgUrl = ref(getMaterialBgUrl())
 
 const techImages = computed(() => {
   try { return JSON.parse(data.value?.tech_images || '[]') } catch { return [] }
 })
-const hasManual = computed(() => !!(data.value?.tech_content || techImages.value.length || data.value?.manual))
+const hasManual = computed(() => !!(data.value?.tech_content || techImages.value.length || data.value?.manual || data.value?.model_file))
+const modelFileName = computed(() => {
+  const p = data.value?.model_file
+  if (!p) return ''
+  return p.split('/').pop() || '模型文件'
+})
 
 const dialogVisible = ref(false)
 const inDialogVisible = ref(false)
@@ -178,9 +199,34 @@ onMounted(loadData)
 
 <style scoped>
 .detail-top { display: flex; gap: 24px; flex-wrap: wrap; }
-.img-box { flex-shrink: 0; }
-.big-img { width: 220px; height: 220px; border-radius: 10px; border: 1px solid var(--border); }
-.no-img { width: 220px; height: 220px; border-radius: 10px; border: 1px dashed var(--border); display: flex; align-items: center; justify-content: center; color: var(--text-sub); font-size: 40px; background: var(--card-2); }
+.img-box {
+  flex-shrink: 0;
+  width: 220px; height: 220px; border-radius: 10px; border: 1px solid var(--border);
+  background-size: cover; background-position: center; background-repeat: no-repeat;
+  overflow: hidden; display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+.big-img { max-width: 100%; max-height: 100%; object-fit: contain; cursor: zoom-in; background: transparent; }
+
+/* 图片预览浮层 */
+.img-preview-mask {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.85);
+  display: flex; align-items: center; justify-content: center;
+}
+.img-preview-stage {
+  width: 80vmin; height: 80vmin; max-width: 720px; max-height: 720px;
+  background-size: cover; background-position: center; background-repeat: no-repeat;
+  border-radius: 8px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  padding: 8%; box-sizing: border-box;
+}
+.img-preview-inner { max-width: 100%; max-height: 100%; object-fit: contain; background: transparent; }
+.img-preview-close {
+  position: absolute; top: 20px; right: 24px;
+  color: #fff; font-size: 28px; cursor: pointer;
+}
 .info-box { flex: 1; min-width: 280px; }
 .mat-name { margin: 0 0 12px; font-size: 20px; color: var(--text-main); }
 .info-row { line-height: 2; color: var(--text-main); }
@@ -193,7 +239,7 @@ onMounted(loadData)
 .stock-item b.warning { color: var(--warning); }
 .stock-item b.danger { color: var(--danger); }
 .action-bar { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; gap: 10px; flex-wrap: wrap; }
-@media (max-width: 768px) { .big-img, .no-img { width: 140px; height: 140px; } }
+@media (max-width: 768px) { .img-box { width: 140px; height: 140px; } }
 .manual-view { padding: 8px 0; }
 .manual-subtitle { margin: 16px 0 10px; font-size: 15px; color: var(--text-main); display: flex; align-items: center; gap: 10px; }
 .manual-subtitle:first-child { margin-top: 0; }
@@ -203,4 +249,7 @@ onMounted(loadData)
 .tech-img { width: 140px; height: 140px; border-radius: 8px; border: 1px solid var(--border); cursor: pointer; }
 .manual-pdf { }
 .pdf-frame { width: 100%; height: 600px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+.manual-model { margin-top: 16px; }
+.model-download { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; background: var(--card-2); border-radius: 8px; color: var(--primary); text-decoration: none; font-size: 14px; }
+.model-download:hover { opacity: 0.8; }
 </style>

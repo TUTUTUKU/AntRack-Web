@@ -69,9 +69,31 @@ def _strip_static_prefix(url: str) -> str:
 def _collect_image_names(materials: List[Dict[str, Any]]) -> List[str]:
     seen = []
     for m in materials:
+        # 物料主图
         name = _strip_static_prefix(m.get("image") or "")
         if name and name not in seen:
             seen.append(name)
+        # 技术参数图片（JSON 数组）
+        tech_imgs = m.get("tech_images") or ""
+        if tech_imgs:
+            try:
+                for p in json.loads(tech_imgs):
+                    n = _strip_static_prefix(p or "")
+                    if n and n not in seen:
+                        seen.append(n)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        # PDF 技术手册
+        name2 = _strip_static_prefix(m.get("manual") or "")
+        if name2 and name2 not in seen:
+            seen.append(name2)
+        # 3D 模型文件
+        name3 = _strip_static_prefix(m.get("model_file") or "")
+        if name3 and name3 not in seen:
+            seen.append(name3)
+    # 背景图
+    if "material-bg.png" not in seen:
+        seen.append("material-bg.png")
     return seen
 
 

@@ -46,7 +46,9 @@
         <el-table-column label="物料名称" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
             <div class="mat-cell">
-              <el-image v-if="row.material_image" :src="row.material_image" fit="cover" class="mat-img" />
+              <div class="mat-img-wrap" :style="{ backgroundImage: `url(${matBgUrl})` }">
+                <img v-if="row.material_image" :src="row.material_image" class="mat-img" />
+              </div>
               <div class="mat-info">
                 <strong>{{ row.material_name }}</strong>
               </div>
@@ -142,6 +144,7 @@ import {
 } from '@/api'
 import { downloadBlob } from '@/utils/file'
 import { fmtNum, fmtPrice } from '@/utils/format'
+import { getMaterialBgUrl } from '@/utils/materialBg'
 
 const route = useRoute()
 const loading = ref(false)
@@ -150,6 +153,7 @@ const bomList = ref([])
 const logs = ref([])
 const logTab = ref('log')
 const materialOptions = ref([])
+const matBgUrl = ref(getMaterialBgUrl())
 
 const isFinished = computed(() => project.value?.status === 'finish')
 
@@ -319,12 +323,15 @@ onMounted(loadData)
 .grow { flex: 1 1 auto; }
 .sub { color: var(--text-sub); font-size: 12px; }
 .mat-cell { display: flex; align-items: center; gap: 10px; }
-.mat-img {
+.mat-img-wrap {
   width: 42px; height: 42px; border-radius: 8px;
   border: 1px solid var(--border);
-  background: var(--card-2);
-  flex-shrink: 0;
+  background-size: cover; background-position: center; background-repeat: no-repeat;
+  overflow: hidden; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 3px; box-sizing: border-box;
 }
+.mat-img { max-width: 100%; max-height: 100%; object-fit: contain; background: transparent; }
 
 .status-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 

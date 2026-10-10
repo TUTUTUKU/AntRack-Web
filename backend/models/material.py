@@ -20,6 +20,7 @@ class Material(Base):
     tech_content = Column(Text, default="", nullable=False)
     tech_images = Column(String(2000), default="", nullable=False)
     manual = Column(String(255), default="", nullable=False)
+    model_file = Column(String(255), default="", nullable=False)
 
     stock_total_num = Column(Float, default=0.0, nullable=False)
     stock_total_cost = Column(Float, default=0.0, nullable=False)

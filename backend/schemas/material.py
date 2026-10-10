@@ -15,6 +15,7 @@ class MaterialIn(BaseModel):
     tech_content: str = Field("", description="技术参数文字内容")
     tech_images: str = Field("", max_length=2000, description="技术参数图片路径JSON数组")
     manual: str = Field("", max_length=255, description="技术手册PDF路径")
+    model_file: str = Field("", max_length=255, description="3D模型文件路径")
     init_stock: float = Field(0.0, ge=0, description="初始库存数量（仅新增时有效）")
     init_cost: float = Field(0.0, ge=0, description="初始入库单价（仅新增时有效）")
 
@@ -33,6 +34,7 @@ class MaterialOut(BaseModel):
     tech_content: str = ""
     tech_images: str = ""
     manual: str = ""
+    model_file: str = ""
     stock_total_num: float
     stock_total_cost: float
     stock_avg_price: float

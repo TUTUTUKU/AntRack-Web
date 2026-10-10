@@ -40,8 +40,9 @@
       >
         <el-table-column label="缩略图" width="70">
           <template #default="{ row }">
-            <el-image v-if="row.image" :src="row.image" :preview-src-list="[row.image]" :preview-teleported="true" fit="cover" style="width:40px;height:40px;border-radius:6px" />
-            <span v-else class="no-img">无</span>
+            <div class="mat-thumb" :style="{ backgroundImage: `url(${matBgUrl})` }" @click="row.image && openPreview(row.image)">
+              <img v-if="row.image" :src="row.image" class="mat-thumb-img" />
+            </div>
           </template>
         </el-table-column>
         <el-table-column prop="name" label="物料名称" min-width="130" show-overflow-tooltip />
@@ -109,6 +110,14 @@
     <MaterialDialog v-model:visible="dialogVisible" :data="editData" @success="loadData" />
     <StockInDialog v-model:visible="inDialogVisible" :material="editData" @success="loadData" />
     <StockOutTempDialog v-model:visible="outDialogVisible" :material="editData" @success="loadData" />
+
+    <!-- 图片预览：背景图 + 物料图叠加 -->
+    <div v-if="previewVisible" class="img-preview-mask" @click="previewVisible = false">
+      <div class="img-preview-stage" :style="{ backgroundImage: `url(${matBgUrl})` }">
+        <img v-if="previewSrc" :src="previewSrc" class="img-preview-inner" />
+      </div>
+      <el-icon class="img-preview-close"><Close /></el-icon>
+    </div>
   </div>
 </template>
 
@@ -116,17 +125,22 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Download, Box, Setting, Check, Delete } from '@element-plus/icons-vue'
+import { Plus, Download, Box, Setting, Check, Delete, Close } from '@element-plus/icons-vue'
 import { getMaterialList, getCategoryList, deleteMaterial, deleteMaterialBatch, exportMaterial } from '@/api'
 import MaterialDialog from '@/components/MaterialDialog.vue'
 import StockInDialog from '@/components/StockInDialog.vue'
 import StockOutTempDialog from '@/components/StockOutTempDialog.vue'
 import { downloadBlob } from '@/utils/file'
 import { fmtNum, fmtPrice } from '@/utils/format'
+import { getMaterialBgUrl } from '@/utils/materialBg'
 
 const router = useRouter()
 const tableRef = ref(null)
 const list = ref([])
+const previewVisible = ref(false)
+const previewSrc = ref('')
+const matBgUrl = ref(getMaterialBgUrl())
+function openPreview(src) { previewSrc.value = src; previewVisible.value = true }
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
@@ -236,6 +250,34 @@ onMounted(() => { loadCats(); loadData() })
 
 <style scoped>
 .no-img { color: var(--text-sub); font-size: 12px; }
+.mat-thumb {
+  width: 48px; height: 48px; border-radius: 6px;
+  background-size: cover; background-position: center; background-repeat: no-repeat;
+  border: 1px solid var(--border); overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  padding: 4px;
+  box-sizing: border-box;
+}
+.mat-thumb-img { max-width: 100%; max-height: 100%; object-fit: contain; cursor: zoom-in; background: transparent; }
+
+/* 图片预览浮层 */
+.img-preview-mask {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.85);
+  display: flex; align-items: center; justify-content: center;
+}
+.img-preview-stage {
+  width: 80vmin; height: 80vmin; max-width: 720px; max-height: 720px;
+  background-size: cover; background-position: center; background-repeat: no-repeat;
+  border-radius: 8px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  padding: 8%; box-sizing: border-box;
+}
+.img-preview-inner { max-width: 100%; max-height: 100%; object-fit: contain; background: transparent; }
+.img-preview-close {
+  position: absolute; top: 20px; right: 24px;
+  color: #fff; font-size: 28px; cursor: pointer;
+}
 .sub { color: var(--text-sub); }
 
 :deep(.toolbar .el-button + .el-button) { margin-left: 0; }

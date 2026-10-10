@@ -97,6 +97,7 @@
           :show-file-list="false"
           :http-request="customUpload"
           accept="image/*"
+          :style="{ '--mat-bg': `url(${matBgUrl})` }"
         >
           <img v-if="form.image" :src="form.image" class="preview-img" />
           <div v-else class="upload-placeholder">
@@ -161,6 +162,24 @@
           </template>
         </div>
       </el-form-item>
+
+      <!-- 3D 模型文件 -->
+      <el-form-item label="3D模型">
+        <div class="manual-box">
+          <el-upload
+            :show-file-list="false"
+            :http-request="onUploadModel"
+          >
+            <el-button size="small" type="primary" plain><el-icon><Upload /></el-icon>上传模型文件</el-button>
+          </el-upload>
+          <template v-if="form.model_file">
+            <a :href="form.model_file" download class="manual-link">
+              <el-icon><Document /></el-icon>{{ modelFileName }}
+            </a>
+            <el-button link type="danger" size="small" @click="form.model_file = ''">移除</el-button>
+          </template>
+        </div>
+      </el-form-item>
     </el-form>
     <template #footer>
       <el-button @click="show = false">取消</el-button>
@@ -173,7 +192,8 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, Close, Upload, Document } from '@element-plus/icons-vue'
-import { getCategoryList, saveMaterial, updateMaterial, uploadImage, uploadManual, nextMaterialCode } from '@/api'
+import { getCategoryList, saveMaterial, updateMaterial, uploadImage, uploadManual, uploadModel, nextMaterialCode } from '@/api'
+import { getMaterialBgUrl } from '@/utils/materialBg'
 
 const props = defineProps({ visible: Boolean, data: Object })
 const emit = defineEmits(['update:visible', 'success'])
@@ -183,13 +203,14 @@ const isEdit = computed(() => !!props.data?.id)
 const formRef = ref()
 const loading = ref(false)
 const allCats = ref([])
+const matBgUrl = ref(getMaterialBgUrl())
 const nextCodeHint = ref('')
 
 const AUTO_CODE_RE = /^AR\d{6}$/
 const form = reactive({
   name: '', code: '', parent_category_id: null, category_id: null,
   spec: '', unit: '个', price_unit: '¥', image: '', warn_num: 0, remark: '',
-  tech_content: '', tech_images: '', manual: '',
+  tech_content: '', tech_images: '', manual: '', model_file: '',
   init_stock: 0, init_cost: 0
 })
 const techImgList = computed({
@@ -261,7 +282,7 @@ watch(() => props.visible, async v => {
       Object.assign(form, {
         name: '', code: '', parent_category_id: null, category_id: null,
         spec: '', unit: '个', price_unit: '¥', image: '', warn_num: 0, remark: '',
-        tech_content: '', tech_images: '', manual: '',
+        tech_content: '', tech_images: '', manual: '', model_file: '',
         init_stock: 0, init_cost: 0
       })
       try {
@@ -311,6 +332,22 @@ async function onUploadManual({ file }) {
   } catch (e) {}
 }
 
+const modelFileName = computed(() => {
+  if (!form.model_file) return ''
+  const name = form.model_file.split('/').pop()
+  return name || '模型文件'
+})
+
+async function onUploadModel({ file }) {
+  const fd = new FormData()
+  fd.append('file', file)
+  try {
+    const res = await uploadModel(fd)
+    form.model_file = res.data.path
+    ElMessage.success('模型文件上传成功')
+  } catch (e) {}
+}
+
 function openPdf(url) {
   window.open(url, '_blank')
 }
@@ -326,7 +363,8 @@ function onSubmit() {
         name: form.name, category_id: form.category_id, code: form.code,
         spec: form.spec, unit: form.unit, price_unit: form.price_unit,
         image: form.image, warn_num: form.warn_num, remark: form.remark,
-        tech_content: form.tech_content, tech_images: form.tech_images, manual: form.manual
+        tech_content: form.tech_content, tech_images: form.tech_images, manual: form.manual,
+        model_file: form.model_file
       }
       if (isEdit.value) {
         await updateMaterial(props.data.id, basePayload)
@@ -347,9 +385,11 @@ function onSubmit() {
 .img-uploader :deep(.el-upload) {
   border: 1px dashed var(--border); border-radius: 8px;
   width: 100px; height: 100px; display: flex; align-items: center; justify-content: center;
-  overflow: hidden; background: var(--card-2);
+  overflow: hidden; padding: 8px; box-sizing: border-box;
+  background-image: var(--mat-bg);
+  background-size: cover; background-position: center; background-repeat: no-repeat;
 }
-.preview-img { width: 100%; height: 100%; object-fit: cover; }
+.preview-img { max-width: 100%; max-height: 100%; object-fit: contain; background: transparent; }
 .upload-placeholder { color: var(--text-sub); display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; }
 .input-center :deep(.el-input__wrapper .el-input__inner) {
   text-align: center;
