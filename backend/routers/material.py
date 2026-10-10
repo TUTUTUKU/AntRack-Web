@@ -43,6 +43,7 @@ def _enrich(m: Material, db: Session) -> dict:
         "tech_content": m.tech_content or "",
         "tech_images": m.tech_images or "",
         "manual": m.manual or "",
+        "model_file": m.model_file or "",
         "stock_total_num": m.stock_total_num,
         "stock_total_cost": m.stock_total_cost,
         "stock_avg_price": m.stock_avg_price,
@@ -155,6 +156,7 @@ def save(data: MaterialIn, db: Session = Depends(get_db), _: object = Depends(ge
         tech_content=data.tech_content or "",
         tech_images=data.tech_images or "",
         manual=data.manual or "",
+        model_file=data.model_file or "",
         stock_total_num=init_num,
         stock_total_cost=init_cost_total,
         stock_avg_price=init_avg_price,
@@ -200,6 +202,7 @@ def update(material_id: int, data: MaterialIn, db: Session = Depends(get_db), _:
     m.tech_content = data.tech_content or ""
     m.tech_images = data.tech_images or ""
     m.manual = data.manual or ""
+    m.model_file = data.model_file or ""
     db.commit()
     return success(msg="物料修改成功")
 
@@ -273,6 +276,46 @@ async def upload_manual(file: UploadFile = File(...), _: object = Depends(get_cu
     save_path = STATIC_DIR / filename
     save_path.write_bytes(content)
     return success({"url": f"{STATIC_URL_PREFIX}/{filename}", "path": f"{STATIC_URL_PREFIX}/{filename}"}, "上传成功")
+
+
+@router.post("/upload-model")
+async def upload_model_file(file: UploadFile = File(...), _: object = Depends(get_current_user)):
+    """上传3D模型文件（支持任意格式，保存时保留原始扩展名）"""
+    if not file.filename:
+        return fail("未选择文件")
+    ext = os.path.splitext(file.filename)[1].lower()
+    content = await file.read()
+    if len(content) > 50 * 1024 * 1024:
+        return fail("文件大小不能超过 50MB")
+    filename = f"{uuid.uuid4().hex}{ext}"
+    save_path = STATIC_DIR / filename
+    save_path.write_bytes(content)
+    return success({"url": f"{STATIC_URL_PREFIX}/{filename}", "path": f"{STATIC_URL_PREFIX}/{filename}", "name": file.filename}, "上传成功")
+
+
+@router.post("/upload-bg")
+async def upload_material_bg(file: UploadFile = File(...), _: object = Depends(get_current_user)):
+    """上传物料默认背景图（覆盖固定文件名 material-bg.png）"""
+    if not file.filename:
+        return fail("未选择文件")
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in (".png", ".jpg", ".jpeg", ".webp"):
+        return fail("仅支持 png/jpg/jpeg/webp 格式")
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        return fail("图片大小不能超过 5MB")
+    bg_path = STATIC_DIR / "material-bg.png"
+    bg_path.write_bytes(content)
+    return success({"url": f"{STATIC_URL_PREFIX}/material-bg.png", "path": f"{STATIC_URL_PREFIX}/material-bg.png"}, "背景图更新成功")
+
+
+@router.get("/bg-url")
+def get_material_bg_url():
+    """获取物料背景图地址，不存在则返回默认占位"""
+    bg_path = STATIC_DIR / "material-bg.png"
+    if bg_path.exists():
+        return success({"url": f"{STATIC_URL_PREFIX}/material-bg.png"})
+    return success({"url": ""})
 
 
 @router.post("/stock-in")

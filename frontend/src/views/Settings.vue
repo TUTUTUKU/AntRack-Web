@@ -20,6 +20,9 @@
             <div class="l2-item" :class="{ active: activeL2 === 'theme' }" @click="activeL2 = 'theme'">
               <el-icon><Brush /></el-icon>主题切换
             </div>
+            <div class="l2-item" :class="{ active: activeL2 === 'material-bg' }" @click="activeL2 = 'material-bg'">
+              <el-icon><Picture /></el-icon>物料背景图
+            </div>
           </div>
         </div>
 
@@ -117,6 +120,26 @@
           </div>
         </template>
 
+        <!-- 物料背景图 -->
+        <template v-else-if="activeL2 === 'material-bg'">
+          <h3 class="sub-title"><el-icon><Picture /></el-icon>物料背景图</h3>
+          <div class="data-card">
+            <p class="hint">上传一张背景图，物料图片将叠加在此背景上显示。未上传物料图片时，也会显示此背景图作为占位。建议使用正方形图片。</p>
+            <div class="bg-config">
+              <div class="bg-preview">
+                <img v-if="bgUrl" :src="bgUrl + '?t=' + bgTs" class="bg-preview-img" />
+                <div v-else class="bg-preview-empty">暂无背景图</div>
+              </div>
+              <div class="bg-actions">
+                <el-upload :show-file-list="false" :http-request="onUploadBg" accept="image/png,image/jpeg,image/webp">
+                  <el-button type="primary"><el-icon><Upload /></el-icon>上传背景图</el-button>
+                </el-upload>
+                <el-button v-if="bgUrl" type="danger" plain @click="onResetBg"><el-icon><RefreshLeft /></el-icon>恢复默认</el-button>
+              </div>
+            </div>
+          </div>
+        </template>
+
         <!-- 冲突处理偏好 -->
         <template v-else-if="activeL2 === 'conflict-prefer'">
           <h3 class="sub-title"><el-icon><Switch /></el-icon>冲突处理偏好</h3>
@@ -203,16 +226,19 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   Setting, Lock, Files, Warning, Tickets, Aim, Refresh,
-  Brush, Tools, Switch, Coin, Cpu, CircleCheckFilled, Timer
+  Brush, Tools, Switch, Coin, Cpu, CircleCheckFilled, Timer,
+  Picture, Upload, RefreshLeft
 } from '@element-plus/icons-vue'
 import {
   changePassword,
   getRevisionInfo,
   getAllUserConfigs,
   setUserConfig,
+  uploadMaterialBg,
 } from '@/api'
 import { themes, getThemeKey, applyTheme } from '@/utils/themes'
 import * as ws from '@/utils/ws'
+import { updateBgTs } from '@/utils/materialBg'
 
 const ConflictPanel = defineAsyncComponent(() => import('@/components/ConflictPanel.vue'))
 const OperationLogsPanel = defineAsyncComponent(() => import('@/components/OperationLogsPanel.vue'))
@@ -293,7 +319,7 @@ async function saveCfg(key, value) {
 }
 
 // 版本
-const version = ref('1.4.2')
+const version = ref('1.4.3')
 const revision = reactive({ global_check_code: 0, server_time: '', version: '' })
 async function loadRevision() {
   try {
@@ -302,6 +328,31 @@ async function loadRevision() {
     revision.global_check_code = res.data.global_check_code
     revision.server_time = res.data.server_time
   } catch (e) {}
+}
+
+// 物料背景图
+const bgUrl = ref('/static/material-bg.png')
+const bgTs = ref(Date.now())
+async function loadBgUrl() {
+  bgUrl.value = '/static/material-bg.png'
+  bgTs.value = Date.now()
+}
+async function onUploadBg({ file }) {
+  const fd = new FormData()
+  fd.append('file', file)
+  try {
+    await uploadMaterialBg(fd)
+    updateBgTs()           // 持久化时间戳，供物料列表/详情等页面刷新缓存
+    bgTs.value = Date.now() // 本地预览立即刷新
+    ElMessage.success('背景图更新成功')
+  } catch (e) {
+    ElMessage.error('上传失败')
+  }
+}
+function onResetBg() {
+  updateBgTs()
+  bgTs.value = Date.now()
+  ElMessage.info('已恢复默认背景图')
 }
 
 // 待处理冲突计数
@@ -319,6 +370,7 @@ onMounted(async () => {
   // 拉版本 & 冲突数 & 配置
   await loadRevision()
   await loadPendingCount()
+  loadBgUrl()
   try {
     const res = await getAllUserConfigs()
     const m = res.data || {}
@@ -365,9 +417,11 @@ onMounted(async () => {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 14px 10px;
-  height: fit-content;
+  align-self: start;
   position: sticky;
-  top: 16px;
+  top: -10px;
+  z-index: 2;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
 }
 .menu-title {
   display: flex;
@@ -420,7 +474,10 @@ onMounted(async () => {
 .badge-conflict { margin-left: auto; }
 
 /* 右内容 */
-.settings-content { min-width: 0; }
+.settings-content {
+  min-width: 0;
+  min-height: calc(100vh - 100px);
+}
 .sub-title {
   margin: 0 0 14px;
   font-size: 15px;
@@ -542,4 +599,11 @@ onMounted(async () => {
 .tc-dot { width: 10px; height: 10px; border-radius: 50%; border: 1px solid #000; flex-shrink: 0; box-sizing: border-box; }
 .tc-name { flex: 1; font-size: 13px; font-weight: 600; color: var(--text-main); }
 .tc-check { color: var(--primary); font-size: 16px; }
+
+/* 物料背景图配置 */
+.bg-config { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+.bg-preview { width: 200px; height: 200px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--card); display: flex; align-items: center; justify-content: center; }
+.bg-preview-img { width: 100%; height: 100%; object-fit: cover; }
+.bg-preview-empty { color: var(--text-sub); font-size: 13px; }
+.bg-actions { display: flex; flex-direction: column; gap: 10px; }
 </style>
