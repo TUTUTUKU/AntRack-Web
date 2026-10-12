@@ -65,7 +65,7 @@ def export_material(db: Session = Depends(get_db), _: object = Depends(get_curre
             "锁定量": m.lock_num,
             "加权单价": m.stock_avg_price,
             "总成本": m.stock_total_cost,
-            "告警阈值": m.warn_num,
+            "告警阈值": "不预警" if m.warn_num < 0 else m.warn_num,
             "备注": m.remark,
             "创建时间": m.create_time.strftime("%Y-%m-%d %H:%M:%S") if m.create_time else "",
         })

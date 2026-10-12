@@ -10,7 +10,7 @@ class MaterialIn(BaseModel):
     unit: str = Field("个", max_length=20, description="计数单位")
     price_unit: str = Field("¥", max_length=10, description="价格单位")
     image: str = Field("", max_length=255, description="图片路径")
-    warn_num: float = Field(0.0, ge=0, description="最低告警库存")
+    warn_num: float = Field(0.0, ge=-1, description="最低告警库存，-1 表示不预警")
     remark: str = Field("", max_length=500, description="备注")
     tech_content: str = Field("", description="技术参数文字内容")
     tech_images: str = Field("", max_length=2000, description="技术参数图片路径JSON数组")
