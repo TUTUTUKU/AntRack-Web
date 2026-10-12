@@ -319,7 +319,7 @@ async function saveCfg(key, value) {
 }
 
 // 版本
-const version = ref('1.4.3')
+const version = ref('1.4.4')
 const revision = reactive({ global_check_code: 0, server_time: '', version: '' })
 async function loadRevision() {
   try {

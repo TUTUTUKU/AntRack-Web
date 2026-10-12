@@ -44,7 +44,7 @@
         </el-col>
         <el-col :span="12">
           <el-form-item label="告警阈值" prop="warn_num">
-            <el-input-number v-model="form.warn_num" :min="0" :precision="0" :controls="false" style="width:100%" placeholder="库存低于此值告警" />
+            <el-input-number v-model="form.warn_num" :min="-1" :precision="0" :controls="false" style="width:100%" placeholder="库存低于此值告警，-1 不预警" />
           </el-form-item>
         </el-col>
       </el-row>

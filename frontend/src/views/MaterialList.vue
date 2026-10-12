@@ -65,7 +65,7 @@
           <template #default="{ row }"><span class="readonly-field">{{ fmtPrice(row.stock_total_cost) }}</span></template>
         </el-table-column>
         <el-table-column label="告警阈值" width="80">
-          <template #default="{ row }">{{ fmtNum(row.warn_num) }}</template>
+          <template #default="{ row }">{{ row.warn_num < 0 ? '不预警' : fmtNum(row.warn_num) }}</template>
         </el-table-column>
         <el-table-column prop="remark" label="备注" min-width="100" show-overflow-tooltip />
         <el-table-column label="操作" :width="manageMode ? 320 : 220" fixed="right" class-name="op-col">

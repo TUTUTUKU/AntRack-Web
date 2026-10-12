@@ -8,7 +8,7 @@
 
 APP_VERSION_MAJOR = 1
 APP_VERSION_MINOR = 4
-APP_VERSION_PATCH = 3
+APP_VERSION_PATCH = 4
 
 
 def get_app_version() -> str:

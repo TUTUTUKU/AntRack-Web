@@ -14,7 +14,7 @@
           <div class="info-row"><span class="lbl">分类：</span>{{ data.parent_category_name }} / {{ data.category_name }}</div>
           <div class="info-row"><span class="lbl">规格：</span>{{ data.spec || '-' }}</div>
           <div class="info-row"><span class="lbl">备注：</span>{{ data.remark || '-' }}</div>
-          <div class="info-row"><span class="lbl">告警阈值：</span>{{ fmtNum(data.warn_num) }}</div>
+          <div class="info-row"><span class="lbl">告警阈值：</span>{{ data.warn_num < 0 ? '不预警' : fmtNum(data.warn_num) }}</div>
           <div class="stock-box">
             <div class="stock-item"><span class="lbl">实际库存</span><b>{{ fmtNum(data.stock_total_num) }}</b></div>
             <div class="stock-item"><span class="lbl">可用库存</span><b class="primary">{{ fmtNum(data.usable_stock) }}</b></div>
